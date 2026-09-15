@@ -1,0 +1,6 @@
+{
+  "name": "Triminds Geo AI - Satellite Earth Observation & LULC Platform",
+  "description": "Plataforma de inteligência artificial geoespacial para classificação de uso e cobertura do solo (LULC), processamento de tensores 64-bandas Google Satellite Embedding, Sentinel-2, inferência Deep Learning e observabilidade MLOps.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

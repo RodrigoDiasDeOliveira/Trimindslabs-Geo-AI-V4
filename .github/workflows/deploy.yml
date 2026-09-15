@@ -1,0 +1,44 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies & Build React
+        run: |
+          npm install --legacy-peer-deps
+          npm install vite@5.4.11 @vitejs/plugin-react@4.3.4 typescript@5.6.3 -D --legacy-peer-deps
+          npx vite build
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy triminds-geo-ai-v4 \
+            --source . \
+            --region europe-west1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --memory 256Mi \
+            --cpu 1 \
+            --allow-unauthenticated
