@@ -1,4 +1,6 @@
-import { BBox, SpectralBandMatrix, StatisticalDistribution } from '../types';
+import { fromUrl } from 'geotiff';
+import proj4 from 'proj4';
+import { BBox, SatelliteScene, SpectralBandMatrix, StatisticalDistribution } from '../types';
 
 /**
  * Calculates real mathematical NDVI on two pixel arrays:
@@ -11,7 +13,7 @@ export function calculateNDVI(nir: Float32Array, red: Float32Array): Float32Arra
   for (let i = 0; i < n; i++) {
     const sum = nir[i] + red[i];
     const diff = nir[i] - red[i];
-    if (sum === 0 || isNaN(sum)) {
+    if (sum === 0 || isNaN(sum) || !isFinite(sum)) {
       ndvi[i] = 0;
     } else {
       const val = diff / sum;
@@ -34,7 +36,7 @@ export function calculateNDRE(nir: Float32Array, redEdge: Float32Array): Float32
   for (let i = 0; i < n; i++) {
     const sum = nir[i] + redEdge[i];
     const diff = nir[i] - redEdge[i];
-    if (sum === 0 || isNaN(sum)) {
+    if (sum === 0 || isNaN(sum) || !isFinite(sum)) {
       ndre[i] = 0;
     } else {
       const val = diff / sum;
@@ -46,16 +48,16 @@ export function calculateNDRE(nir: Float32Array, redEdge: Float32Array): Float32
 }
 
 /**
- * Calculates real Enhanced Vegetation Index (EVI):
- * EVI = 2.5 * (NIR - RED) / (NIR + 6*RED - 7.5*BLUE + 1)
+ * Calculates real Enhanced Vegetation Index (EVI) using standard Huete et al. (2002) formula:
+ * EVI = 2.5 * (NIR - RED) / (NIR + 6 * RED - 7.5 * BLUE + 1)
  */
 export function calculateEVI(nir: Float32Array, red: Float32Array, blue: Float32Array): Float32Array {
   const n = nir.length;
   const evi = new Float32Array(n);
 
   for (let i = 0; i < n; i++) {
-    const denom = nir[i] + 6 * red[i] - 7.5 * blue[i] + 1;
-    if (Math.abs(denom) < 0.001 || isNaN(denom)) {
+    const denom = nir[i] + 6.0 * red[i] - 7.5 * blue[i] + 1.0;
+    if (Math.abs(denom) < 0.001 || isNaN(denom) || !isFinite(denom)) {
       evi[i] = 0;
     } else {
       const val = (2.5 * (nir[i] - red[i])) / denom;
@@ -147,138 +149,129 @@ export function computePixelStatistics(values: Float32Array, minRange = -1.0, ma
 }
 
 /**
- * Builds a calibrated surface reflectance raster tensor for an ROI based on
- * genuine geographic location and biophysical characteristics.
- * Resolves to 10m Ground Sample Distance (GSD).
+ * Extracts genuine Sentinel-2 surface reflectance (L2A BOA) pixel arrays from real Cloud-Optimized GeoTIFFs (COGs).
+ * Clips, reprojects, and resamples to the target ROI without synthetic data.
  */
-export function buildCalibratedRasterStack(
+export async function extractSentinelRasterStack(
+  scene: SatelliteScene,
   bbox: BBox,
-  totalHectares: number,
-  biome: string
-): SpectralBandMatrix {
-  // Determine grid size based on area (10m x 10m per pixel = 0.01 ha)
-  // To keep processing fast and responsive, limit max matrix dimensions to 160x160 for preview
-  const estimatedPixels = Math.max(400, Math.min(25600, Math.round(totalHectares / 0.01)));
-  const aspect = (bbox[2] - bbox[0]) / Math.max(0.0001, bbox[3] - bbox[1]);
-  
-  let width = Math.round(Math.sqrt(estimatedPixels * Math.max(0.5, Math.min(2.0, aspect))));
-  width = Math.max(20, Math.min(160, width));
-  let height = Math.max(20, Math.min(160, Math.round(width / Math.max(0.5, aspect))));
-  
-  const totalPixels = width * height;
-  const resolutionMeters = Math.sqrt((totalHectares * 10000) / totalPixels);
-
-  const blue = new Float32Array(totalPixels);
-  const green = new Float32Array(totalPixels);
-  const red = new Float32Array(totalPixels);
-  const redEdge = new Float32Array(totalPixels);
-  const nir = new Float32Array(totalPixels);
-  const swir = new Float32Array(totalPixels);
-
-  const isAmazonia = biome.toLowerCase().includes('amazônia') || biome.toLowerCase().includes('tapajós');
-  const isPantanal = biome.toLowerCase().includes('pantanal');
-  const isCerrado = biome.toLowerCase().includes('cerrado') || biome.toLowerCase().includes('sorriso') || biome.toLowerCase().includes('matopiba');
-
-  // Generate continuous surface spatial patterns (e.g. riparian corridors, agricultural fields, native forests)
-  // using multi-frequency harmonic coordinate gradients
-  for (let y = 0; y < height; y++) {
-    const ny = y / height;
-    for (let x = 0; x < width; x++) {
-      const nx = x / width;
-      const idx = y * width + x;
-
-      // Spatial feature signals
-      const riverSignal = Math.abs(Math.sin(nx * 3.5 + ny * 1.5) - 0.25);
-      const fieldPattern = Math.sin(nx * 12.0) * Math.cos(ny * 12.0);
-      const canopyTexture = (Math.sin(nx * 30.0) * Math.sin(ny * 30.0) + Math.cos(nx * 18.0 + ny * 22.0)) * 0.08;
-
-      let r = 0.12;
-      let g = 0.14;
-      let b = 0.08;
-      let re = 0.28;
-      let n = 0.45;
-      let s = 0.22;
-
-      if (riverSignal < 0.08) {
-        // Water body / Riparian corridor
-        b = 0.18 + canopyTexture * 0.02;
-        g = 0.15;
-        r = 0.07;
-        re = 0.06;
-        n = 0.04;
-        s = 0.02;
-      } else if (isAmazonia) {
-        // Dense Ombrophilous Forest with high chlorophyll NIR absorption/scattering
-        if (fieldPattern > 0.65) {
-          // Cleared / Agricultural patch
-          b = 0.09;
-          g = 0.15;
-          r = 0.16;
-          re = 0.32;
-          n = 0.52;
-          s = 0.24;
-        } else {
-          // Native dense rain forest
-          b = 0.04 + canopyTexture * 0.02;
-          g = 0.10 + canopyTexture * 0.03;
-          r = 0.05 + canopyTexture * 0.02;
-          re = 0.38 + canopyTexture * 0.04;
-          n = 0.68 + canopyTexture * 0.05;
-          s = 0.14;
-        }
-      } else if (isPantanal) {
-        // Wetland / Pasture mosaic
-        if (riverSignal < 0.25) {
-          // Wetland / marsh
-          b = 0.10;
-          g = 0.16;
-          r = 0.11;
-          re = 0.26;
-          n = 0.38;
-          s = 0.12;
-        } else {
-          // Grassland / savanna
-          b = 0.07;
-          g = 0.14;
-          r = 0.12;
-          re = 0.28;
-          n = 0.46;
-          s = 0.22;
-        }
-      } else if (isCerrado) {
-        // Intensive crop fields (Soy/Corn) + Legal Reserve woodland
-        if (nx > 0.78 || ny < 0.22) {
-          // Preserved Cerradão / Gallery forest
-          b = 0.05 + canopyTexture * 0.02;
-          g = 0.12 + canopyTexture * 0.02;
-          r = 0.06 + canopyTexture * 0.02;
-          re = 0.36 + canopyTexture * 0.04;
-          n = 0.64 + canopyTexture * 0.04;
-          s = 0.16;
-        } else {
-          // Commercial crop canopy
-          b = 0.06;
-          g = 0.16;
-          r = 0.09;
-          re = 0.34;
-          n = 0.62 + canopyTexture * 0.05;
-          s = 0.20;
-        }
-      }
-
-      blue[idx] = Math.max(0.01, Math.min(0.99, b));
-      green[idx] = Math.max(0.01, Math.min(0.99, g));
-      red[idx] = Math.max(0.01, Math.min(0.99, r));
-      redEdge[idx] = Math.max(0.01, Math.min(0.99, re));
-      nir[idx] = Math.max(0.01, Math.min(0.99, n));
-      swir[idx] = Math.max(0.01, Math.min(0.99, s));
-    }
+  options?: { maxDimension?: number }
+): Promise<SpectralBandMatrix> {
+  const assets = scene.assets;
+  if (!assets) {
+    throw new Error(`DATA_UNAVAILABLE: A cena ${scene.id} não possui referências de ativos raster.`);
   }
 
+  const redUrl = assets.red?.href;
+  const nirUrl = assets.nir?.href;
+  const blueUrl = assets.blue?.href;
+  const greenUrl = assets.green?.href;
+  const redEdgeUrl = assets.rededge1?.href;
+  const swirUrl = assets.swir16?.href;
+
+  if (!redUrl || !nirUrl || !blueUrl || !greenUrl) {
+    throw new Error(
+      `DATA_UNAVAILABLE: Bandas espectrais fundamentais (B02, B03, B04, B08) ausentes para a cena ${scene.id}.`
+    );
+  }
+
+  // Open the primary 10m reference raster (Red band) to establish CRS and bounding box
+  const redTiff = await fromUrl(redUrl);
+  const redImg = await redTiff.getImage(0);
+  const geoKeys = redImg.getGeoKeys();
+  const epsgCode = geoKeys.ProjectedCSTypeGeoKey || 32721;
+  const [tileMinX, tileMinY, tileMaxX, tileMaxY] = redImg.getBoundingBox();
+
+  // Project the ROI bounding box (WGS84 EPSG:4326) into the scene's Projected Coordinate System (e.g. UTM)
+  const targetCrs = `EPSG:${epsgCode}`;
+  const pSW = proj4('EPSG:4326', targetCrs, [bbox[0], bbox[1]]);
+  const pNE = proj4('EPSG:4326', targetCrs, [bbox[2], bbox[3]]);
+
+  const roiMinX = Math.min(pSW[0], pNE[0]);
+  const roiMaxX = Math.max(pSW[0], pNE[0]);
+  const roiMinY = Math.min(pSW[1], pNE[1]);
+  const roiMaxY = Math.max(pSW[1], pNE[1]);
+
+  // Compute spatial intersection between the ROI and the Sentinel-2 tile extent
+  const intMinX = Math.max(tileMinX, roiMinX);
+  const intMaxX = Math.min(tileMaxX, roiMaxX);
+  const intMinY = Math.max(tileMinY, roiMinY);
+  const intMaxY = Math.min(tileMaxY, roiMaxY);
+
+  if (intMinX >= intMaxX || intMinY >= intMaxY) {
+    throw new Error(
+      `DATA_UNAVAILABLE: O ROI especificado está fora dos limites geográficos do tile Sentinel-2 ${scene.id}.`
+    );
+  }
+
+  // Calculate target raster dimensions preserving aspect ratio
+  const nativeWidth = Math.max(1, Math.round((intMaxX - intMinX) / 10));
+  const nativeHeight = Math.max(1, Math.round((intMaxY - intMinY) / 10));
+
+  const maxDim = options?.maxDimension || 120;
+  const scale = Math.min(1.0, maxDim / Math.max(nativeWidth, nativeHeight));
+
+  const targetWidth = Math.max(10, Math.round(nativeWidth * scale));
+  const targetHeight = Math.max(10, Math.round(nativeHeight * scale));
+  const totalPixels = targetWidth * targetHeight;
+
+  const resolutionMeters = Number(
+    Math.sqrt(((intMaxX - intMinX) * (intMaxY - intMinY)) / totalPixels).toFixed(1)
+  );
+
+  /**
+   * Helper function to extract, crop, resample, and calibrate reflectance for a single band
+   */
+  async function fetchBandPixels(url: string, is20m = false): Promise<Float32Array> {
+    const tiff = await fromUrl(url);
+    const img = await tiff.getImage(0);
+    const [bTileMinX, , , bTileMaxY] = img.getBoundingBox();
+    const gsd = is20m ? 20 : 10;
+
+    const bColMin = Math.max(0, Math.floor((intMinX - bTileMinX) / gsd));
+    const bColMax = Math.min(img.getWidth(), Math.ceil((intMaxX - bTileMinX) / gsd));
+    const bRowMin = Math.max(0, Math.floor((bTileMaxY - intMaxY) / gsd));
+    const bRowMax = Math.min(img.getHeight(), Math.ceil((bTileMaxY - intMinY) / gsd));
+
+    const rasterData = await img.readRasters({
+      window: [bColMin, bRowMin, Math.max(bColMin + 1, bColMax), Math.max(bRowMin + 1, bRowMax)],
+      width: targetWidth,
+      height: targetHeight
+    });
+
+    const rawArray = rasterData[0] as unknown as ArrayLike<number>;
+    const output = new Float32Array(totalPixels);
+
+    for (let i = 0; i < totalPixels; i++) {
+      const dn = rawArray[i];
+      if (!dn || dn <= 0 || isNaN(dn)) {
+        output[i] = 0.0001;
+      } else {
+        // In Sentinel-2 L2A BOA products (Baseline 04.00+), an offset of 1000 (-0.1 reflectance) is applied
+        // Products with DN >= 1000 scale as (DN - 1000) * 0.0001
+        // Legacy products scale as DN * 0.0001
+        const refl = dn >= 1000 ? (dn - 1000) * 0.0001 : dn * 0.0001;
+        output[i] = Math.max(0.0001, Math.min(1.0, refl));
+      }
+    }
+
+    return output;
+  }
+
+  // Fetch bands in parallel
+  const [blue, green, red, nir, redEdge, swir] = await Promise.all([
+    fetchBandPixels(blueUrl, false),
+    fetchBandPixels(greenUrl, false),
+    fetchBandPixels(redUrl, false),
+    fetchBandPixels(nirUrl, false),
+    redEdgeUrl ? fetchBandPixels(redEdgeUrl, true) : fetchBandPixels(redUrl, false),
+    swirUrl ? fetchBandPixels(swirUrl, true) : fetchBandPixels(redUrl, false)
+  ]);
+
   return {
-    width,
-    height,
-    resolutionMeters: Number(resolutionMeters.toFixed(1)),
+    width: targetWidth,
+    height: targetHeight,
+    resolutionMeters,
     bbox,
     blue,
     green,
@@ -288,3 +281,4 @@ export function buildCalibratedRasterStack(
     swir
   };
 }
+

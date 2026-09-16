@@ -75,11 +75,16 @@ export function calculateCarbonAudit(
     standardReference: 'Fatores de Emissão e Estoque de Carbono Médio por Bioma Brasileiro (MapBiomas Biomassa v2)',
     totalEstimatedStockTonCO2e: roundedTotal,
     averageDensityTonHa: avgDensity,
+    units: {
+      stock: 'tCO2e (toneladas de CO2 equivalente)',
+      density: 'tCO2e/ha'
+    },
+    natureOfResult: 'computational_estimate',
     assumptions: [
-      'Estoque estimado combinando biomassa aérea viva, raízes e carbono orgânico do solo (0-30cm).',
+      'Estoque computacional estimado combinando biomassa aérea viva, raízes e carbono orgânico do solo (0-30cm).',
       'Conversão estequiométrica de Biomassa Seca para Carbono (CF = 0.47) e CO2e (fator 44/12 = 3.667).',
-      'Para certificação regulatória de créditos de carbono (Verra VCS / ART TREES), requer amostragem florestal em campo ou transectos LiDAR.',
-      'Classes de água e infraestrutura possuem fator de emissão zero (0 tCO2e/ha).'
+      'Estimativa baseada em fatores médios de literatura científica (IPCC Tier 1). Não substitui inventário florestal de campo para fins de certificação ou comercialização de créditos.',
+      'Classes de corpos d água e infraestrutura viária possuem fator de estoque atribuído como zero (0 tCO2e/ha).'
     ],
     factorsUsed
   };

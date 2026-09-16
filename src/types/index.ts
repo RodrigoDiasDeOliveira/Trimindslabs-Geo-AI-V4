@@ -104,7 +104,7 @@ export interface SavedAreaAnalysis {
   createdAt: string;
   updatedAt: string;
   author: string;
-  authorRole: 'admin' | 'operador';
+  authorRole: 'admin' | 'operador' | 'operator';
   status: 'analyzed' | 'pending';
   results: {
     meanNdvi: number;

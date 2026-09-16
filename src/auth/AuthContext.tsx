@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
-export type UserRole = 'admin' | 'operador';
+export type UserRole = 'admin' | 'operator' | 'operador';
 
 export interface UserSession {
   username: string;
@@ -8,19 +8,12 @@ export interface UserSession {
   name: string;
   loginTime: string;
   token?: string;
-  mode?: string;
-}
-
-export interface AuthConfig {
-  mode: 'AUTH_DISABLED' | 'AUTH_ENABLED';
-  adminPasswordConfigured: boolean;
-  operatorPasswordConfigured: boolean;
+  expiresAt?: string;
 }
 
 interface AuthContextType {
   user: UserSession | null;
-  authConfig: AuthConfig;
-  login: (role: UserRole, password?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAdmin: boolean;
   isOperador: boolean;
@@ -32,12 +25,6 @@ const STORAGE_KEY = 'triminds_geoai_auth_user';
 const TOKEN_KEY = 'triminds_geoai_auth_token';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [authConfig, setAuthConfig] = useState<AuthConfig>({
-    mode: 'AUTH_DISABLED',
-    adminPasswordConfigured: false,
-    operatorPasswordConfigured: false
-  });
-
   const [user, setUser] = useState<UserSession | null>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -47,45 +34,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
-  // Fetch backend authentication mode configuration
-  useEffect(() => {
-    fetch('/api/auth/config')
-      .then(res => res.json())
-      .then(data => {
-        if (data?.mode) {
-          setAuthConfig(data);
-        }
-      })
-      .catch(() => {
-        // Fallback default
-        setAuthConfig({
-          mode: 'AUTH_DISABLED',
-          adminPasswordConfigured: false,
-          operatorPasswordConfigured: false
-        });
-      });
-  }, []);
-
-  const login = async (role: UserRole, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, password })
+        body: JSON.stringify({
+          username: username.trim(),
+          password
+        })
       });
 
       const data = await res.json();
-      if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'Falha na autenticação.' };
+
+      if (!res.ok || !data.authenticated) {
+        return {
+          success: false,
+          error: data.error || 'Invalid username or password.'
+        };
       }
 
       const session: UserSession = {
         username: data.user.username,
         role: data.user.role,
-        name: data.user.name,
+        name: data.user.name || (data.user.role === 'admin' ? 'Administrador' : 'Operador'),
         loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         token: data.token,
-        mode: data.mode
+        expiresAt: data.expiresAt
       };
 
       setUser(session);
@@ -95,8 +70,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: `Erro de conexão com o servidor de autenticação: ${err.message}` };
+    } catch {
+      return {
+        success: false,
+        error: 'Unable to connect to authentication server. Please try again.'
+      };
     }
   };
 
@@ -107,10 +85,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isAdmin = user?.role === 'admin';
-  const isOperador = user?.role === 'operador';
+  const isOperador = user?.role === 'operator' || user?.role === 'operador';
 
   return (
-    <AuthContext.Provider value={{ user, authConfig, login, logout, isAdmin, isOperador }}>
+    <AuthContext.Provider value={{ user, login, logout, isAdmin, isOperador }}>
       {children}
     </AuthContext.Provider>
   );

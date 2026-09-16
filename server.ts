@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
+import 'dotenv/config';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { authenticateUser, getAuthConfiguration, verifyToken } from './server/auth';
@@ -39,6 +40,8 @@ app.get('/api/health', (_req, res) => {
   const memory = process.memoryUsage();
   res.json({
     status: 'healthy',
+    apiVersion: '4.0.0',
+    service: 'Triminds-Geo-AI-V4-Core',
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.floor(process.uptime()),
     runtime: {
@@ -51,22 +54,80 @@ app.get('/api/health', (_req, res) => {
         heapUsedMb: Number((memory.heapUsed / (1024 * 1024)).toFixed(1))
       }
     },
-    service: 'Triminds-Geo-AI-V4-Core',
-    environment: process.env.NODE_ENV || 'development'
+    hardwareAcceleration: {
+      gpuAvailable: false,
+      executionEngine: 'Node.js V8 SIMD / Float32Array (CPU Deterministic)'
+    },
+    processingCapabilities: [
+      'SENTINEL2_COG_SPECTRAL_EXTRACTION',
+      'DETERMINISTIC_VEGETATION_INDICES',
+      'RULE_BASED_SPECTRAL_LULC',
+      'IPCC_TIER1_CARBON_AUDIT',
+      'CAR_COMPLIANCE_INDICATOR'
+    ],
+    environment: process.env.NODE_ENV || 'production'
   });
 });
 
-app.get('/api/v1/health', (_req, res) => {
-  res.redirect(301, '/api/health');
+app.get('/api/v1/health', async (_req, res) => {
+  const memory = process.memoryUsage();
+  let providerList: any[] = [];
+  try {
+    providerList = await checkAllProviders();
+  } catch (e) {
+    console.warn('Falha ao checar status de provedores para health check:', e);
+  }
+
+  res.json({
+    status: 'healthy',
+    apiVersion: '4.0.0',
+    service: 'Triminds-Geo-AI-V4-Core',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
+    runtime: {
+      nodeVersion: process.version,
+      platform: `${os.platform()} (${os.arch()})`,
+      cpuCount: os.cpus().length,
+      memory: {
+        rssMb: Number((memory.rss / (1024 * 1024)).toFixed(1)),
+        heapTotalMb: Number((memory.heapTotal / (1024 * 1024)).toFixed(1)),
+        heapUsedMb: Number((memory.heapUsed / (1024 * 1024)).toFixed(1))
+      }
+    },
+    hardwareAcceleration: {
+      gpuAvailable: false,
+      executionEngine: 'Node.js V8 SIMD / Float32Array (CPU Deterministic)'
+    },
+    processingCapabilities: [
+      'SENTINEL2_COG_SPECTRAL_EXTRACTION',
+      'DETERMINISTIC_VEGETATION_INDICES',
+      'RULE_BASED_SPECTRAL_LULC',
+      'IPCC_TIER1_CARBON_AUDIT',
+      'CAR_COMPLIANCE_INDICATOR'
+    ],
+    providers: providerList,
+    environment: process.env.NODE_ENV || 'production'
+  });
 });
 
 // Real provider status verification
 app.get('/api/v1/providers/status', async (_req, res) => {
   try {
     const statuses = await checkAllProviders();
+    const providersMap: Record<string, { available: boolean; configured: boolean; status: string; message: string }> = {};
+    for (const p of statuses) {
+      providersMap[p.id] = {
+        available: p.status === 'AVAILABLE' || p.status === 'CONNECTED',
+        configured: p.status !== 'NOT_CONFIGURED',
+        status: p.status,
+        message: p.message
+      };
+    }
+
     res.json({
       checkedAt: new Date().toISOString(),
-      providers: statuses
+      providers: statuses,
+      providerMap: providersMap
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Erro ao verificar provedores geoespaciais', message: err.message });
@@ -82,15 +143,15 @@ app.get('/api/auth/config', (_req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
-  const { role = 'operador', password } = req.body || {};
+  const { username, password, role } = req.body || {};
+  const userIdentifier = username || role;
 
-  if (role !== 'admin' && role !== 'operador') {
-    return res.status(400).json({ error: 'Papel de usuário inválido. Escolha admin ou operador.' });
-  }
-
-  const result = authenticateUser(role, password);
-  if (!result.success) {
-    return res.status(401).json({ error: result.error });
+  const result = authenticateUser(userIdentifier, password);
+  if (!result.authenticated) {
+    return res.status(401).json({
+      authenticated: false,
+      error: 'Invalid username or password.'
+    });
   }
 
   return res.json(result);
@@ -338,50 +399,33 @@ Estruture o parecer estritamente com:
 3. Auditoria Regulatória CAR & Reserva Legal
 4. Recomendações Agronômicas e de Manejo de Precisão.`;
 
-  try {
-    const ai = getGenAi();
-    if (ai) {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
-
-      return res.json({
-        success: true,
-        source: 'Gemini 2.5 Flash (Server-Side)',
-        report: response.text,
-        generatedAt: new Date().toISOString()
-      });
-    }
-  } catch (err: any) {
-    console.warn('[Gemini API warning]:', err?.message || err);
+  const ai = getGenAi();
+  if (!ai) {
+    return res.status(503).json({
+      error: 'AI_PROVIDER_UNAVAILABLE',
+      message: 'O provedor de Inteligência Artificial generativa não está disponível porque a variável de ambiente GEMINI_API_KEY não foi configurada. O pipeline geoespacial determinístico com dados reais de satélite opera de forma independente e auditável.'
+    });
   }
 
-  // Clear, non-simulated local fallback if GEMINI_API_KEY is not configured
-  const localReport = `### Parecer Técnico GeoAI (Triminds Agronomic Intelligence)
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt
+    });
 
-**1. Síntese Executiva do Talhão**
-A propriedade **${farmName}**, localizada em **${region}** (${biome}), totaliza **${Number(areaHectares).toLocaleString('pt-BR')} ha** com dados espectrais Sentinel-2 L2A processados pelo motor **${modelUsed}**.
-
-**2. Avaliação de Vigor e Fitossanidade (NDVI & NDRE)**
-- **NDVI Médio (${meanNdvi}):** Reflete a densidade de biomassa e atividade fotossintética atual da vegetação no talhão.
-- **NDRE Médio (${meanNdre}):** Mede a absorção de clorofila na borda do vermelho (RedEdge 705nm), útil para monitoramento de estresse hídrico ou nutricional.
-
-**3. Auditoria Regulatória CAR & Reserva Legal**
-- **Status do Cadastro Ambiental Rural:** **${carStatus}**.
-- **Estoque de Carbono Acumulado:** Estimado em **${Number(carbonStockTon).toLocaleString('pt-BR')} tCO2e** com base em coeficientes médios validados do bioma ${biome} (IPCC/MCTI).
-
-**4. Recomendações Agronômicas**
-1. Realizar acompanhamento temporal contínuo na janela da safra com novas passagens do satélite.
-2. Manter isoladas e demarcadas no mapa as faixas de Área de Preservação Permanente (APP) hídricas.
-3. Adotar mapas de aplicação em taxa variável nos setores com menores índices de NDRE.`;
-
-  return res.json({
-    success: true,
-    source: 'Parecer Estruturado Local (Configurar GEMINI_API_KEY para síntese generativa dinâmica)',
-    report: localReport,
-    generatedAt: new Date().toISOString()
-  });
+    return res.json({
+      success: true,
+      source: 'Google Gemini 3.8 Flash (Server-Side)',
+      report: response.text,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (err: any) {
+    console.warn('[Gemini API error]:', err?.message || err);
+    return res.status(502).json({
+      error: 'AI_GENERATION_FAILED',
+      message: `Falha na chamada à API Gemini: ${err?.message || 'Erro desconhecido'}`
+    });
+  }
 });
 
 // ==========================================

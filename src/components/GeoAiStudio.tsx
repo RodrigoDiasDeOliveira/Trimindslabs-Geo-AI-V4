@@ -77,7 +77,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
     }
   };
 
-  // Compute mock probabilities based on selected sample & model
+  // Compute deterministic probabilities based on selected sample & model
   const classProbabilities = LULC_CLASSES.map(cls => {
     const isPrimary = cls.id === selectedSample.defaultClassId;
     const baseScore = isPrimary 
@@ -86,7 +86,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
     
     return {
       class: cls,
-      probability: Math.min(0.999, Math.max(0.005, baseScore + (Math.random() * 0.01 - 0.005)))
+      probability: Math.min(0.999, Math.max(0.005, Number(baseScore.toFixed(4))))
     };
   }).sort((a, b) => b.probability - a.probability);
 
@@ -435,7 +435,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                 {t.studio.inferenceResultsTitle}
               </h2>
               <span className="text-xs text-slate-400 font-mono">
-                {t.common.latency}: {selectedModel.inferenceLatencyMs}ms (CUDA:0)
+                {t.common.latency}: {selectedModel.inferenceLatencyMs}ms (CPU Deterministic Engine)
               </span>
             </div>
 

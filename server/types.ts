@@ -98,10 +98,13 @@ export interface AnalysisProvenance {
   sceneId?: string;
   acquisitionDate?: string;
   cloudCoveragePct?: number;
+  sunElevationDeg?: number;
   bandsUsed: string[];
   spatialResolutionMeters: number;
   totalPixelsProcessed: number;
   processingDurationMs: number;
+  assetUrls?: Record<string, string>;
+  crs?: string;
   timestamp: string;
   environment: string;
 }
@@ -111,6 +114,8 @@ export interface CarbonAuditResult {
   standardReference: string;
   totalEstimatedStockTonCO2e: number;
   averageDensityTonHa: number;
+  units: { stock: string; density: string };
+  natureOfResult: 'computational_estimate';
   assumptions: string[];
   factorsUsed: Record<string, number>;
 }
@@ -144,6 +149,9 @@ export interface AnalysisResult {
     requiredPreservationPct: number;
     actualPreservationPct: number;
     preservationSurplusHa: number;
+    disclaimer: string;
+    isLegalCertification: boolean;
+    nature: 'computational_indicator';
   };
   carbonAudit: CarbonAuditResult;
   provenance: AnalysisProvenance;
@@ -152,15 +160,27 @@ export interface AnalysisResult {
 
 export type PipelineStage = 
   | 'queued'
+  | 'QUEUED'
   | 'validating_roi'
+  | 'VALIDATING_ROI'
   | 'searching_satellite'
+  | 'SEARCHING_SCENES'
   | 'acquiring_raster'
+  | 'DOWNLOADING_RASTER'
   | 'computing_indices'
+  | 'CALCULATING_INDICES'
   | 'running_inference'
+  | 'CLASSIFYING_LULC'
   | 'spatial_statistics'
+  | 'CALCULATING_CARBON'
   | 'generating_evidence'
+  | 'GENERATING_PROVENANCE'
   | 'completed'
-  | 'failed';
+  | 'COMPLETED'
+  | 'data_unavailable'
+  | 'DATA_UNAVAILABLE'
+  | 'failed'
+  | 'FAILED';
 
 export interface AnalysisJob {
   id: string;
@@ -171,5 +191,6 @@ export interface AnalysisJob {
   updatedAt: string;
   completedAt?: string;
   error?: string;
+  errorCode?: string;
   result?: AnalysisResult;
 }

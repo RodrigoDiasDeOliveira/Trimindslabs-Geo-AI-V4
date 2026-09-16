@@ -8,13 +8,13 @@ import {
   SatelliteScene
 } from '../types';
 import { validateROI } from './roiValidator';
-import { publicStacSentinelProvider, earthEngineProvider } from './satelliteProvider';
+import { publicStacSentinelProvider } from './satelliteProvider';
 import {
-  buildCalibratedRasterStack,
   calculateEVI,
   calculateNDRE,
   calculateNDVI,
-  computePixelStatistics
+  computePixelStatistics,
+  extractSentinelRasterStack
 } from './spectralProcessor';
 import { classifySpectralTensor } from './geoAiClassifier';
 import { calculateCarbonAudit } from './carbonAudit';
@@ -46,7 +46,7 @@ export class GeoSpatialPipelineService {
       id: jobId,
       status: 'queued',
       progressPct: 5,
-      stageMessage: 'Job enfileirado na pipeline geoespacial...',
+      stageMessage: 'Job enfileirado na pipeline geoespacial v4...',
       createdAt: now,
       updatedAt: now
     };
@@ -59,7 +59,9 @@ export class GeoSpatialPipelineService {
         console.error(`[Pipeline Error] Job ${jobId} falhou:`, err);
         const current = JOBS_DB.get(jobId);
         if (current) {
-          current.status = 'failed';
+          const isDataUnavailable = err.message && (err.message.includes('DATA_UNAVAILABLE') || err.message.includes('não encontrada'));
+          current.status = isDataUnavailable ? 'DATA_UNAVAILABLE' : 'failed';
+          current.errorCode = isDataUnavailable ? 'DATA_UNAVAILABLE' : 'PROCESSING_ERROR';
           current.error = err.message || 'Erro durante a execução da pipeline.';
           current.updatedAt = new Date().toISOString();
         }
@@ -87,7 +89,7 @@ export class GeoSpatialPipelineService {
   }
 
   /**
-   * Complete real step-by-step geospatial execution.
+   * Complete real step-by-step geospatial execution using real satellite assets.
    */
   private async executeJob(jobId: string, request: StartAnalysisRequest): Promise<void> {
     const startTime = performance.now();
@@ -104,50 +106,66 @@ export class GeoSpatialPipelineService {
     const biome = request.biome || 'Cerrado';
     const farmName = request.farmName || 'Área de Monitoramento GeoAI';
     const regionName = request.regionName || 'Região Agrícola Selecionada';
+    const maxCloud = request.maxCloudCover ?? 30;
 
-    // STAGE 2: Satellite Acquisition (STAC search / GEE)
-    this.updateJobProgress(jobId, 'searching_satellite', 30, 'Consultando catálogo STAC para Sentinel-2 L2A...');
+    // STAGE 2: Satellite Acquisition (STAC search for real Sentinel-2 scenes)
+    this.updateJobProgress(jobId, 'searching_satellite', 30, 'Consultando catálogo STAC para cenas Sentinel-2 L2A reais...');
     let scenes: SatelliteScene[] = [];
-    let providerName = 'Copernicus Sentinel-2 L2A (STAC)';
-    let datasetName = 'COPERNICUS/S2_SR_HARMONIZED';
-    let chosenScene: SatelliteScene | undefined;
 
     try {
       scenes = await publicStacSentinelProvider.searchScenes(geometry, {
         dateRange: request.dateRange,
-        maxCloudCover: request.maxCloudCover ?? 30,
+        maxCloudCover: maxCloud,
         limit: 5
       });
-      if (scenes.length > 0) {
-        chosenScene = scenes[0];
-      }
     } catch (stacErr: any) {
-      console.warn(`[Pipeline] Busca STAC remota inacessível (${stacErr.message}). Utilizando processamento espectral com base em parâmetros geoespaciais.`);
+      throw new Error(`DATA_UNAVAILABLE: Falha de conexão com catálogo STAC Sentinel-2: ${stacErr.message}`);
     }
 
-    // STAGE 3: Preprocessing & Raster Grid Assembly
-    this.updateJobProgress(jobId, 'acquiring_raster', 45, 'Montando tensores multiespectrais de superfície (10m GSD)...');
-    const rasterStack = buildCalibratedRasterStack(bbox, areaHectares!, biome);
+    if (!scenes || scenes.length === 0) {
+      throw new Error(
+        `DATA_UNAVAILABLE: Nenhuma cena Sentinel-2 L2A com cobertura de nuvens <= ${maxCloud}% foi encontrada para o ROI e período selecionados no catálogo STAC.`
+      );
+    }
 
-    // STAGE 4: Spectral Indices Computation
-    this.updateJobProgress(jobId, 'computing_indices', 60, 'Calculando matrizes matemáticas de NDVI, NDRE e EVI...');
+    const chosenScene = scenes[0];
+    const providerName = chosenScene.provider || 'Copernicus Sentinel-2 L2A (STAC Earth Search)';
+    const datasetName = chosenScene.collection || 'sentinel-2-l2a';
+
+    // STAGE 3: Preprocessing & Real Raster Grid Assembly
+    this.updateJobProgress(
+      jobId,
+      'acquiring_raster',
+      45,
+      `Baixando tensores multiespectrais reais da cena ${chosenScene.id} via COG...`
+    );
+
+    let rasterStack;
+    try {
+      rasterStack = await extractSentinelRasterStack(chosenScene, bbox, { maxDimension: 128 });
+    } catch (rasterErr: any) {
+      throw new Error(`DATA_UNAVAILABLE: Falha ao baixar ativos raster reais da cena Sentinel-2: ${rasterErr.message}`);
+    }
+
+    // STAGE 4: Spectral Indices Computation on real pixels
+    this.updateJobProgress(jobId, 'computing_indices', 60, 'Calculando matrizes matemáticas de NDVI, NDRE e EVI a partir dos pixels reais...');
     const ndviMatrix = calculateNDVI(rasterStack.nir, rasterStack.red);
     const ndreMatrix = calculateNDRE(rasterStack.nir, rasterStack.redEdge);
     const eviMatrix = calculateEVI(rasterStack.nir, rasterStack.red, rasterStack.blue);
 
-    // Descriptive Statistics
+    // Real descriptive statistics
     const ndviStats = computePixelStatistics(ndviMatrix, -0.2, 1.0);
     const ndreStats = computePixelStatistics(ndreMatrix, -0.2, 1.0);
     const eviStats = computePixelStatistics(eviMatrix, 0.0, 1.2);
 
-    // STAGE 5: Geo-AI Inference (Rule-based & Foundation Adapter)
-    const modelName = request.selectedModel || 'hybrid_cnn_vit';
-    this.updateJobProgress(jobId, 'running_inference', 75, `Executando inferência LULC com motor ${modelName}...`);
+    // STAGE 5: Geo-AI Inference (Rule-based spectral LULC classification)
+    const modelName = request.selectedModel || 'rule_based_spectral_v4';
+    this.updateJobProgress(jobId, 'running_inference', 75, `Executando classificação espectral determinística de uso e cobertura do solo...`);
     
     const classification = classifySpectralTensor(rasterStack, ndviMatrix, ndreMatrix, eviMatrix);
 
-    // STAGE 6: Spatial Statistics & Compliance
-    this.updateJobProgress(jobId, 'spatial_statistics', 88, 'Auditando Reserva Legal (CAR) e estimando estoque de carbono...');
+    // STAGE 6: Spatial Statistics, Carbon Stock & CAR Indicators
+    this.updateJobProgress(jobId, 'spatial_statistics', 88, 'Calculando indicador de Reserva Legal (CAR) e auditoria de carbono...');
     
     const isAmazonia = biome.toLowerCase().includes('amazôn');
     const requiredPreservationPct = isAmazonia ? 80 : 20;
@@ -168,19 +186,32 @@ export class GeoSpatialPipelineService {
     const endTime = performance.now();
     const totalProcessingTimeMs = Number((endTime - startTime).toFixed(2));
 
+    const assetUrls: Record<string, string> = {};
+    if (chosenScene.assets) {
+      if (chosenScene.assets.red?.href) assetUrls.red = chosenScene.assets.red.href;
+      if (chosenScene.assets.nir?.href) assetUrls.nir = chosenScene.assets.nir.href;
+      if (chosenScene.assets.blue?.href) assetUrls.blue = chosenScene.assets.blue.href;
+      if (chosenScene.assets.green?.href) assetUrls.green = chosenScene.assets.green.href;
+      if (chosenScene.assets.rededge1?.href) assetUrls.rededge = chosenScene.assets.rededge1.href;
+      if (chosenScene.assets.swir16?.href) assetUrls.swir = chosenScene.assets.swir16.href;
+    }
+
     const provenance = {
       correlationId,
       analysisId: jobId,
-      pipelineVersion: '4.0.0-live',
+      pipelineVersion: '4.0.0-real-sentinel2',
       provider: providerName,
       dataset: datasetName,
-      sceneId: chosenScene?.id || `S2A_MSIL2A_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}_T21K`,
-      acquisitionDate: chosenScene?.datetime || new Date().toISOString(),
-      cloudCoveragePct: chosenScene?.cloudCoverPct ?? 4.2,
+      sceneId: chosenScene.id,
+      acquisitionDate: chosenScene.datetime,
+      cloudCoveragePct: chosenScene.cloudCoverPct,
+      sunElevationDeg: chosenScene.sunElevationDeg,
       bandsUsed: ['B02_Blue', 'B03_Green', 'B04_Red', 'B05_RedEdge', 'B08_NIR', 'B11_SWIR'],
       spatialResolutionMeters: rasterStack.resolutionMeters,
       totalPixelsProcessed: classification.pixelsProcessed,
       processingDurationMs: totalProcessingTimeMs,
+      assetUrls,
+      crs: 'EPSG:4326',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'production'
     };
@@ -203,7 +234,7 @@ export class GeoSpatialPipelineService {
         totalProcessingTimeMs,
         pixelsProcessed: classification.pixelsProcessed,
         spatialResolutionMeters: rasterStack.resolutionMeters,
-        modelsExecuted: [modelName, 'Spectral-LULC-Calibrator-v2']
+        modelsExecuted: [modelName, 'Rule-Based-Spectral-LULC-Classifier-v4']
       },
       vegetation: {
         ndvi: ndviStats,
@@ -217,7 +248,10 @@ export class GeoSpatialPipelineService {
         biomeTarget: isAmazonia ? 'Amazônia (Exigência Reserva Legal 80%)' : 'Cerrado (Exigência Reserva Legal 20% / 35%)',
         requiredPreservationPct,
         actualPreservationPct,
-        preservationSurplusHa: surplusHa
+        preservationSurplusHa: surplusHa,
+        disclaimer: 'Indicador computacional preliminar de conformidade com o Código Florestal Brasileiro (Lei 12.651/2012). Não constitui validação legal perante órgãos ambientais (SICAR / Órgãos Estaduais).',
+        isLegalCertification: false,
+        nature: 'computational_indicator'
       },
       carbonAudit,
       provenance,
@@ -231,7 +265,7 @@ export class GeoSpatialPipelineService {
     if (job) {
       job.status = 'completed';
       job.progressPct = 100;
-      job.stageMessage = 'Análise geoespacial concluída com sucesso.';
+      job.stageMessage = 'Análise geoespacial com dados reais concluída com sucesso.';
       job.completedAt = new Date().toISOString();
       job.updatedAt = new Date().toISOString();
       job.result = finalResult;
@@ -240,3 +274,4 @@ export class GeoSpatialPipelineService {
 }
 
 export const pipelineService = new GeoSpatialPipelineService();
+

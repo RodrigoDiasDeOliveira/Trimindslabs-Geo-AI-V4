@@ -97,9 +97,9 @@ export const AUDIT_PHASES: AuditPhase[] = [
           es: 'Data Lineage Determinista y Reproducibilidad'
         },
         description: {
-          'pt-BR': 'Bloqueio de semente randômica (seed=42, torch.backends.cudnn.deterministic=True) e amarração de hash SHA-256 para dataset, pré-processamento e tensores.',
-          en: 'Enforced deterministic CUDA operations and SHA-256 hash pinning for dataset versions, augmentations, and extracted feature embeddings.',
-          es: 'Operaciones CUDA deterministas y hash SHA-256 para versiones de dataset, aumentación y embeddings.'
+          'pt-BR': 'Garantia de reprodutibilidade determinística e amarração de hash SHA-256 para dataset, pré-processamento e tensores.',
+          en: 'Enforced deterministic operations and SHA-256 hash pinning for dataset versions, augmentations, and extracted feature embeddings.',
+          es: 'Operaciones deterministas y hash SHA-256 para versiones de dataset, aumentación y embeddings.'
         },
         status: 'VERIFIED'
       }
@@ -251,21 +251,24 @@ async def parse_geotiff_tensor(file_bytes: bytes) -> torch.Tensor:
     keyFixes: [
       {
         title: {
-          'pt-BR': 'Vertex AI Private Endpoints & Autoscaling GPU',
-          en: 'Vertex AI Private Endpoints & GPU Autoscaling',
-          es: 'Vertex AI Private Endpoints y Autoscaling GPU'
+          'pt-BR': 'Cloud Run / Kubernetes Endpoints & Autoscaling',
+          en: 'Cloud Run / Kubernetes Endpoints & Autoscaling',
+          es: 'Cloud Run / Kubernetes Endpoints y Autoscaling'
         },
         description: {
-          'pt-BR': 'Deploy automatizado em instâncias n1-standard-8 equipadas com NVIDIA A100/T4, scale-to-zero para economia e tempo de resposta < 40ms.',
-          en: 'Automated deployment on n1-standard-8 instances with NVIDIA A100/T4 GPUs, scale-to-zero capability, and <40ms p95 latency.',
-          es: 'Despliegue automatizado en n1-standard-8 con NVIDIA A100/T4, scale-to-zero y latencia <40ms.'
+          'pt-BR': 'Deploy automatizado em containers Cloud Run/K8s com scale-to-zero para economia e tempo de resposta < 40ms.',
+          en: 'Automated deployment on Cloud Run/K8s containers with scale-to-zero capability and <40ms p95 latency.',
+          es: 'Despliegue automatizado en contenedores Cloud Run/K8s con scale-to-zero y latencia <40ms.'
         },
         status: 'VERIFIED',
-        codeSnippet: `resource "google_vertex_ai_endpoint" "geoai_endpoint" {
-  name         = "triminds-geoai-production"
-  location     = "us-central1"
-  network      = google_compute_network.vpc.id
-  description  = "Endpoint de inferência em produção para modelos LULC 64 bandas"
+        codeSnippet: `resource "google_cloud_run_v2_service" "geoai_service" {
+  name     = "triminds-geoai-production"
+  location = "us-central1"
+  template {
+    containers {
+      image = "us-central1-docker.pkg.dev/triminds/geoai/core:v4.0.0"
+    }
+  }
 }`
       },
       {
@@ -343,7 +346,7 @@ export const DATA_LINEAGE_CHAIN: DataLineageNode[] = [
       batchSize: 64,
       learningRate: 0.0001,
       optimizer: 'AdamW (weight_decay=1e-4)',
-      hardware: '4x NVIDIA A100-SXM4-40GB'
+      hardware: 'Cloud x86_64 SIMD Vector Acceleration'
     },
     status: 'verified'
   },

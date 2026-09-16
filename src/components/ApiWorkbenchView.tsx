@@ -24,104 +24,100 @@ interface EndpointConfig {
 
 const ENDPOINTS: EndpointConfig[] = [
   {
-    id: 'predict',
-    name: 'Classificação LULC (Tensor / GeoTIFF)',
-    method: 'POST',
-    path: '/api/v1/predict',
-    description: 'Executa a inferência de uso do solo recebendo um GeoTIFF multipart ou array de tensores de 64 bandas.',
-    defaultPayload: JSON.stringify({
-      model_name: "resnet50",
-      use_adapter_64_bands: true,
-      coordinates: [-55.72, -12.54],
-      sensor: "GoogleSatelliteEmbedding_v1",
-      mosaic_year: 2024,
-      return_attention_map: true
-    }, null, 2),
-    mockResponse: {
-      status: "success",
-      inference_time_ms: 34.2,
-      model: "resnet50_64ch_v2",
-      primary_prediction: {
-        class_id: "AnnualCrop",
-        class_name: "Lavoura Anual (Soja / Milho)",
-        confidence: 0.9942
-      },
-      top_classes: [
-        { class_id: "AnnualCrop", probability: 0.9942 },
-        { class_id: "Pasture", probability: 0.0035 },
-        { class_id: "HerbaceousVegetation", probability: 0.0012 }
-      ],
-      tensor_metadata: {
-        input_channels: 64,
-        spatial_resolution_meters: 10.0,
-        bbox: [-55.75, -12.58, -55.69, -12.51]
-      }
-    }
-  },
-  {
     id: 'health',
-    name: 'Health Check & GPU Status',
+    name: 'Health Check & Runtime Status',
     method: 'GET',
     path: '/api/v1/health',
-    description: 'Retorna o status de integridade do cluster de inferência, uso de VRAM e disponibilidade dos modelos.',
+    description: 'Retorna a integridade do runtime Node.js, versão da API v4, métricas de memória e capacidades do motor espectral.',
     mockResponse: {
       status: "healthy",
-      version: "2.4.0",
-      gpu_device: "NVIDIA A100-SXM4-40GB",
-      vram_allocated_gb: 4.82,
-      vram_total_gb: 40.0,
-      loaded_models: ["resnet50", "vit_b16", "swin_tiny", "efficientnet_b0", "hybrid_cnn_vit"],
-      adapter_64_bands_active: true
-    }
-  },
-  {
-    id: 'classes',
-    name: 'Listar Classes LULC Suportadas',
-    method: 'GET',
-    path: '/api/v1/classes',
-    description: 'Retorna os códigos e metadados das 10 classes EuroSAT / LULC.',
-    mockResponse: {
-      total_classes: 10,
-      classes: [
-        { id: "AnnualCrop", code: "AC", color: "#eab308" },
-        { id: "Forest", code: "FO", color: "#15803d" },
-        { id: "HerbaceousVegetation", code: "HV", color: "#84cc16" },
-        { id: "Highway", code: "HW", color: "#64748b" },
-        { id: "Industrial", code: "IN", color: "#dc2626" },
-        { id: "Pasture", code: "PA", color: "#a3e635" },
-        { id: "PermanentCrop", code: "PC", color: "#d97706" },
-        { id: "Residential", code: "RE", color: "#ec4899" },
-        { id: "River", code: "RI", color: "#0284c7" },
-        { id: "SeaLake", code: "SL", color: "#06b6d4" }
+      apiVersion: "4.0.0",
+      service: "Triminds-Geo-AI-V4-Core",
+      runtime: {
+        nodeVersion: "v20.x",
+        platform: "linux (x64)",
+        cpuCount: 4
+      },
+      hardwareAcceleration: {
+        gpuAvailable: false,
+        executionEngine: "Node.js V8 SIMD / Float32Array (CPU Deterministic)"
+      },
+      processingCapabilities: [
+        "SENTINEL2_COG_SPECTRAL_EXTRACTION",
+        "DETERMINISTIC_VEGETATION_INDICES",
+        "RULE_BASED_SPECTRAL_LULC",
+        "IPCC_TIER1_CARBON_AUDIT",
+        "CAR_COMPLIANCE_INDICATOR"
       ]
     }
   },
   {
-    id: 'models',
-    name: 'Model Zoo & Checkpoints Registry',
+    id: 'providers_status',
+    name: 'Status dos Provedores Satelitais',
     method: 'GET',
-    path: '/api/v1/models',
-    description: 'Lista os modelos de Deep Learning disponíveis com latência, F1-score e suporte a tensores 64-bandas.',
+    path: '/api/v1/providers/status',
+    description: 'Verifica em tempo real a conectividade com o catálogo STAC Sentinel-2 (Earth Search) e Google Earth Engine.',
     mockResponse: {
-      status: "success"
+      checkedAt: new Date().toISOString(),
+      providers: [
+        {
+          id: "sentinel_stac",
+          name: "Copernicus Sentinel-2 L2A (STAC AWS)",
+          status: "AVAILABLE",
+          message: "Catálogo STAC operacional via AWS Earth Search."
+        },
+        {
+          id: "earth_engine",
+          name: "Google Earth Engine (GEE API)",
+          status: "NOT_CONFIGURED",
+          message: "Defina EARTH_ENGINE_SERVICE_ACCOUNT para habilitar."
+        }
+      ]
     }
   },
   {
-    id: 'roi',
-    name: 'Análise Espacial de ROI (GEE / Maps)',
+    id: 'satellite_search',
+    name: 'Consultar Cenas Sentinel-2 L2A (STAC)',
     method: 'POST',
-    path: '/api/v1/roi/analyze',
-    description: 'Delimita polígono ou bounding box de interesse e retorna hectares, quebra de classes, carbono e conformidade CAR.',
+    path: '/api/v1/satellite/search',
+    description: 'Consulta cenas reais Sentinel-2 L2A com Cloud-Optimized GeoTIFFs para um bounding box ou polígono GeoJSON.',
     defaultPayload: JSON.stringify({
-      sourceType: "google_earth_engine",
-      sourceFormat: "cog_float32",
-      center: { lat: -12.5428, lng: -55.7214 },
-      widthKm: 4.0,
-      lengthKm: 4.0,
-      model: "hybrid_cnn_vit"
+      geometry: [-55.75, -12.55, -55.70, -12.50],
+      maxCloudCover: 30,
+      provider: "stac"
     }, null, 2),
     mockResponse: {
-      status: "success"
+      provider: "sentinel_stac",
+      count: 1,
+      scenes: [
+        {
+          id: "S2B_21LXG_20260912_0_L2A",
+          collection: "sentinel-2-l2a",
+          datetime: "2026-09-12T14:15:32Z",
+          cloudCoverPct: 12.4,
+          bandsAvailable: ["B02", "B03", "B04", "B08", "B05", "B11"]
+        }
+      ]
+    }
+  },
+  {
+    id: 'analysis_start',
+    name: 'Iniciar Pipeline Geoespacial Real',
+    method: 'POST',
+    path: '/api/v1/analysis',
+    description: 'Submete um job assíncrono para processar tensores espectrais reais Sentinel-2 COG, calcular NDVI/NDRE/EVI e LULC.',
+    defaultPayload: JSON.stringify({
+      farmName: "Fazenda Santa Helena",
+      regionName: "Sorriso - MT",
+      biome: "Cerrado",
+      geometry: [-55.75, -12.55, -55.70, -12.50],
+      maxCloudCover: 30,
+      selectedModel: "rule_based_spectral_v4"
+    }, null, 2),
+    mockResponse: {
+      jobId: "geoai_1726484000_a1b2c3d4",
+      status: "queued",
+      message: "Job de análise geoespacial submetido com sucesso."
     }
   },
   {
@@ -129,20 +125,22 @@ const ENDPOINTS: EndpointConfig[] = [
     name: 'Parecer Agronômico IA (Google GenAI Gemini)',
     method: 'POST',
     path: '/api/v1/ai/report',
-    description: 'Aciona o modelo Gemini 3.8 Flash no servidor para elaborar laudo agronômico e de conformidade CAR.',
+    description: 'Aciona o modelo Gemini 2.5 Flash no servidor para elaborar laudo agronômico e análise de evidências.',
     defaultPayload: JSON.stringify({
-      farmName: "Fazenda Rio Vermelho",
+      farmName: "Fazenda Santa Helena",
       region: "Sorriso - MT",
       biome: "Cerrado",
-      areaHectares: 5400,
-      meanNdvi: 0.76,
-      meanNdre: 0.51,
-      carbonStockTon: 290000,
+      areaHectares: 3250,
+      meanNdvi: 0.74,
+      meanNdre: 0.49,
+      carbonStockTon: 185000,
       carStatus: "CONFORME",
-      modelUsed: "Hybrid CNN-ViT Dual-Stream"
+      modelUsed: "Rule-Based Spectral LULC v4"
     }, null, 2),
     mockResponse: {
-      status: "success"
+      success: true,
+      source: "Google Gemini 2.5 Flash",
+      report: "Síntese executiva elaborada a partir de evidências espectrais reais..."
     }
   }
 ];

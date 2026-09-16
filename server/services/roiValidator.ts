@@ -5,45 +5,43 @@ const MAX_ALLOWED_HECTARES = 100000; // 100,000 hectares cap for on-demand cloud
 
 /**
  * Calculates geodesic area of a polygon on Earth's surface in square meters
- * using the spherical excess / Girard's theorem.
+ * using the standard spherical excess formula.
  */
 function calculateSphericalPolygonArea(coords: number[][]): number {
   if (!coords || coords.length < 3) return 0;
-
   const toRad = (deg: number) => (deg * Math.PI) / 180;
-  let totalAngle = 0;
-  const n = coords.length;
 
-  for (let i = 0; i < n; i++) {
-    const p1 = coords[i];
-    const p2 = coords[(i + 1) % n];
-    const p3 = coords[(i + 2) % n];
-
-    const lat1 = toRad(p1[1]);
-    const lon1 = toRad(p1[0]);
-    const lat2 = toRad(p2[1]);
-    const lon2 = toRad(p2[0]);
-    const lat3 = toRad(p3[1]);
-    const lon3 = toRad(p3[0]);
-
-    // Bearing from p2 to p1 and p2 to p3
-    const y1 = Math.sin(lon1 - lon2) * Math.cos(lat1);
-    const x1 = Math.cos(lat2) * Math.sin(lat1) - Math.sin(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2);
-    const b1 = Math.atan2(y1, x1);
-
-    const y2 = Math.sin(lon3 - lon2) * Math.cos(lat3);
-    const x2 = Math.cos(lat2) * Math.sin(lat3) - Math.sin(lat2) * Math.cos(lat3) * Math.cos(lon3 - lon2);
-    const b2 = Math.atan2(y2, x2);
-
-    let angle = b2 - b1;
-    while (angle <= -Math.PI) angle += 2 * Math.PI;
-    while (angle > Math.PI) angle -= 2 * Math.PI;
-
-    totalAngle += angle;
+  // If closed ring, drop last duplicate vertex
+  let ring = coords;
+  if (
+    coords.length > 3 &&
+    coords[0][0] === coords[coords.length - 1][0] &&
+    coords[0][1] === coords[coords.length - 1][1]
+  ) {
+    ring = coords.slice(0, -1);
   }
 
-  const excess = Math.abs(totalAngle);
-  return excess * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS;
+  const n = ring.length;
+  if (n < 3) return 0;
+
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const p1 = ring[i];
+    const p2 = ring[(i + 1) % n];
+    const lambda1 = toRad(p1[0]);
+    const lambda2 = toRad(p2[0]);
+    const phi1 = toRad(p1[1]);
+    const phi2 = toRad(p2[1]);
+    total += (lambda2 - lambda1) * (2 + Math.sin(phi1) + Math.sin(phi2));
+  }
+
+  let area = Math.abs((total * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS) / 2.0);
+  const sphereArea = 4 * Math.PI * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS;
+  if (area > sphereArea / 2) {
+    area = sphereArea - area;
+  }
+
+  return area;
 }
 
 /**
