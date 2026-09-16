@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useAuth } from '../auth/AuthContext';
 import { 
   Terminal, 
   Send, 
@@ -147,6 +148,7 @@ const ENDPOINTS: EndpointConfig[] = [
 
 export const ApiWorkbenchView: React.FC = () => {
   const { language, t } = useLanguage();
+  const { token } = useAuth();
   const [selectedEndpointId, setSelectedEndpointId] = useState<string>('predict');
   const [requestPayload, setRequestPayload] = useState<string>(ENDPOINTS[0].defaultPayload || '');
   const [responseOutput, setResponseOutput] = useState<object | null>(ENDPOINTS[0].mockResponse);
@@ -166,7 +168,7 @@ export const ApiWorkbenchView: React.FC = () => {
         method: selectedEndpoint.method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer triminds_dev_token'
+          'Authorization': token ? `Bearer ${token}` : 'Bearer triminds_dev_token'
         }
       };
 

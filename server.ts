@@ -4,7 +4,14 @@ import os from 'os';
 import 'dotenv/config';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
-import { authenticateUser, getAuthConfiguration, verifyToken } from './server/auth';
+import {
+  authenticateUser,
+  getAuthConfiguration,
+  verifyToken,
+  isAuthenticationEnabled,
+  isAuthenticationConfigured,
+  requireAuthMiddleware
+} from './server/auth';
 import { validateROI } from './server/services/roiValidator';
 import {
   checkAllProviders,
@@ -84,6 +91,10 @@ app.get('/api/v1/health', async (_req, res) => {
     service: 'Triminds-Geo-AI-V4-Core',
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.floor(process.uptime()),
+    authentication: {
+      enabled: isAuthenticationEnabled(),
+      configured: isAuthenticationConfigured()
+    },
     runtime: {
       nodeVersion: process.version,
       platform: `${os.platform()} (${os.arch()})`,
@@ -148,9 +159,11 @@ app.post('/api/auth/login', (req, res) => {
 
   const result = authenticateUser(userIdentifier, password);
   if (!result.authenticated) {
-    return res.status(401).json({
+    const statusCode = result.status || 401;
+    return res.status(statusCode).json({
       authenticated: false,
-      error: 'Invalid username or password.'
+      configured: result.configured,
+      error: result.error || 'Invalid username or password.'
     });
   }
 
@@ -177,7 +190,7 @@ app.get('/api/auth/verify', (req, res) => {
 // 3. GEOSPATIAL ROI VALIDATION
 // ==========================================
 
-app.post('/api/v1/roi/validate', (req, res) => {
+app.post('/api/v1/roi/validate', requireAuthMiddleware, (req, res) => {
   const { geometry } = req.body || {};
   const validation = validateROI(geometry);
   if (!validation.valid) {
@@ -190,7 +203,7 @@ app.post('/api/v1/roi/validate', (req, res) => {
 // 4. SATELLITE SCENE DISCOVERY (STAC & GEE)
 // ==========================================
 
-app.post('/api/v1/satellite/search', async (req, res) => {
+app.post('/api/v1/satellite/search', requireAuthMiddleware, async (req, res) => {
   try {
     const { geometry, dateRange, maxCloudCover = 30, provider = 'stac' } = req.body || {};
 
@@ -243,7 +256,7 @@ app.post('/api/v1/satellite/search', async (req, res) => {
 // ==========================================
 
 // Create/Queue Job
-app.post('/api/v1/analysis', (req, res) => {
+app.post('/api/v1/analysis', requireAuthMiddleware, (req, res) => {
   try {
     const { geometry } = req.body || {};
     const validation = validateROI(geometry);
@@ -323,7 +336,7 @@ app.get('/api/v1/analysis/:id/geojson', (req, res) => {
 });
 
 // Synchronous analysis endpoint (Direct return of AnalysisResult)
-app.post('/api/v1/roi/analyze', async (req, res) => {
+app.post('/api/v1/roi/analyze', requireAuthMiddleware, async (req, res) => {
   try {
     const { geometry } = req.body || {};
     const validation = validateROI(geometry);
@@ -367,7 +380,7 @@ function getGenAi(): GoogleGenAI | null {
   return genAiClient;
 }
 
-app.post('/api/v1/ai/report', async (req, res) => {
+app.post('/api/v1/ai/report', requireAuthMiddleware, async (req, res) => {
   const {
     farmName = 'Propriedade Rural',
     region = 'Brasil',
@@ -454,14 +467,14 @@ const AUDIT_LOGS_MEMORY: Array<{
   }
 ];
 
-app.get('/api/v1/audit/logs', (_req, res) => {
+app.get('/api/v1/audit/logs', requireAuthMiddleware, (_req, res) => {
   res.json({
     total: AUDIT_LOGS_MEMORY.length,
     logs: AUDIT_LOGS_MEMORY
   });
 });
 
-app.post('/api/v1/audit/logs', (req, res) => {
+app.post('/api/v1/audit/logs', requireAuthMiddleware, (req, res) => {
   const { action, details, user = 'operador', userName = 'Operador' } = req.body || {};
   const newLog = {
     id: `aud_${Date.now()}`,
@@ -499,6 +512,18 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Triminds GeoAI v4 Server] Listening on http://0.0.0.0:${PORT} (Node ${process.version})`);
   });
+
+  // Support Google Cloud Run PORT environment variable if different from port 3000
+  const cloudRunPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
+  if (cloudRunPort && cloudRunPort !== PORT) {
+    try {
+      app.listen(cloudRunPort, '0.0.0.0', () => {
+        console.log(`[Triminds GeoAI v4 Server] Also listening on Cloud Run port http://0.0.0.0:${cloudRunPort}`);
+      });
+    } catch (err) {
+      console.warn(`[Triminds GeoAI v4 Server] Note: Cloud Run port ${cloudRunPort} listener did not bind:`, err);
+    }
+  }
 }
 
 startServer();

@@ -15,11 +15,11 @@ import { ReportsManagementView } from './components/ReportsManagementView';
 import { Satellite, Github, ShieldCheck } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { user } = useAuth();
+  const { user, authConfig } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('studio');
 
-  // If user is not logged in, show Login Screen
-  if (!user) {
+  // If authentication is enabled and user is not logged in, show Login Screen
+  if (authConfig.enabled && !user) {
     return <LoginView />;
   }
 

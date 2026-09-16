@@ -58,7 +58,7 @@ import {
 
 export const AreaSelectionView: React.FC = () => {
   const { language } = useLanguage();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, authFetch } = useAuth();
 
   // Storage state
   const [savedAnalyses, setSavedAnalyses] = useState<SavedAreaAnalysis[]>([]);
@@ -222,7 +222,7 @@ export const AreaSelectionView: React.FC = () => {
       : computedBbox;
 
     try {
-      const res = await fetch('/api/v1/satellite/search', {
+      const res = await authFetch('/api/v1/satellite/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,7 +263,7 @@ export const AreaSelectionView: React.FC = () => {
       : computedBbox;
 
     try {
-      const res = await fetch('/api/v1/analysis', {
+      const res = await authFetch('/api/v1/analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -289,7 +289,7 @@ export const AreaSelectionView: React.FC = () => {
 
       pollIntervalRef.current = setInterval(async () => {
         try {
-          const statusRes = await fetch(`/api/v1/analysis/${jobId}/status`);
+          const statusRes = await authFetch(`/api/v1/analysis/${jobId}/status`);
           const statusData = await statusRes.json();
 
           if (statusData.status === 'completed') {
@@ -298,7 +298,7 @@ export const AreaSelectionView: React.FC = () => {
             setAnalysisStageText(statusData.stageMessage || 'Análise concluída.');
 
             // Fetch final result
-            const resultRes = await fetch(`/api/v1/analysis/${jobId}/result`);
+            const resultRes = await authFetch(`/api/v1/analysis/${jobId}/result`);
             const finalResult: AnalysisResult = await resultRes.json();
             setLiveAnalysisResult(finalResult);
             setIsAnalyzing(false);
@@ -387,7 +387,7 @@ export const AreaSelectionView: React.FC = () => {
         modelUsed: currentAnalysis!.selectedModel
       };
 
-      const res = await fetch('/api/v1/ai/report', {
+      const res = await authFetch('/api/v1/ai/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
