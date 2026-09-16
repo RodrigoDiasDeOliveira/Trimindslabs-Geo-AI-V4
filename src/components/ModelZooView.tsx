@@ -4,13 +4,13 @@ import { DEEP_LEARNING_MODELS, LULC_CLASSES, DeepLearningModel } from '../data/g
 import { 
   Cpu, 
   Award, 
-  Zap, 
   Layers, 
   CheckCircle2, 
-  BarChart3, 
   ShieldCheck,
   Sparkles,
-  Info
+  Info,
+  Clock,
+  Database
 } from 'lucide-react';
 
 export const ModelZooView: React.FC = () => {
@@ -29,13 +29,27 @@ export const ModelZooView: React.FC = () => {
             {t.models.title}
           </h1>
           <p className="text-sm sm:text-base text-slate-400 mt-1 max-w-3xl">
-            {t.models.subtitle}
+            Catálogo de arquiteturas e estado operacional do motor de classificação geoespacial.
           </p>
         </div>
 
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 font-semibold">
           <Award className="w-4 h-4 text-emerald-400" />
-          <span>{t.models.topPerforming}: Hybrid CNN-Transformer (F1 99.2%)</span>
+          <span>Motor Ativo em Produção: Hybrid Spectral CNN-ViT</span>
+        </div>
+      </div>
+
+      {/* Disclaimers Bar regarding Validation Metrics vs Runtime Metrics */}
+      <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex items-start gap-3 text-xs text-slate-400">
+        <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <strong className="text-slate-200 block font-semibold">
+            Nota de Governança de Métricas (Diretriz V4):
+          </strong>
+          <p className="leading-relaxed">
+            As taxas de F1-Score e Acurácia abaixo correspondem a <em>métricas de validação offline de benchmark</em> (avaliadas em conjunto de teste EuroSAT / Sentinel-2 L2A com validação cruzada 10-fold). 
+            Em execuções reais de inferência no talhão, a plataforma reporta estritamente <em>métricas operacionais</em> (latência de inferência em ms, contagem real de pixels processados e resolução espacial de 10m).
+          </p>
         </div>
       </div>
 
@@ -43,6 +57,8 @@ export const ModelZooView: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {DEEP_LEARNING_MODELS.map(model => {
           const isSelected = selectedModel.id === model.id;
+          const isActiveInRuntime = model.id === 'hybrid_cnn_vit' || model.id === 'resnet50';
+
           return (
             <div
               key={model.id}
@@ -58,8 +74,14 @@ export const ModelZooView: React.FC = () => {
                   <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-purple-300">
                     {model.family}
                   </span>
-                  <span className="text-xs font-mono text-slate-400">
-                    {model.parameters}
+                  
+                  {/* Real Status Badge */}
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                    isActiveInRuntime
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    {isActiveInRuntime ? 'ACTIVE (Runtime)' : 'STANDBY (Catálogo)'}
                   </span>
                 </div>
 
@@ -75,19 +97,16 @@ export const ModelZooView: React.FC = () => {
 
               <div className="space-y-2 pt-2 border-t border-slate-800/80">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{t.common.f1Score}:</span>
+                  <span className="text-slate-400">Benchmark F1 Offline:</span>
                   <span className="font-mono font-bold text-emerald-400">{(model.f1Score * 100).toFixed(1)}%</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{t.common.latency}:</span>
+                  <span className="text-slate-400">Latência Típica:</span>
                   <span className="font-mono font-bold text-sky-400">{model.inferenceLatencyMs} ms</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Tensor 64-Bandas:</span>
-                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Nativo
-                  </span>
+                  <span className="text-slate-400">Parâmetros:</span>
+                  <span className="font-mono text-slate-300">{model.parameters}</span>
                 </div>
               </div>
             </div>
@@ -101,15 +120,15 @@ export const ModelZooView: React.FC = () => {
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-400" />
-              <span>{t.models.confusionMatrix} - {selectedModel.name}</span>
+              <span>Validação de Benchmark - {selectedModel.name}</span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Validação cruzada 10-fold no benchmark de LULC com suporte ao EmbeddingAdapter de 64 canais.
+              Validação cruzada 10-fold no benchmark EuroSAT / Sentinel-2 L2A BOA.
             </p>
           </div>
 
           <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="text-emerald-400 font-bold">Acurácia Global: {(selectedModel.accuracy * 100).toFixed(1)}%</span>
+            <span className="text-emerald-400 font-bold">Acurácia Validação: {(selectedModel.accuracy * 100).toFixed(1)}%</span>
             <span className="text-purple-400 font-bold">F1 Macro: {(selectedModel.f1Score * 100).toFixed(1)}%</span>
           </div>
         </div>
@@ -140,9 +159,9 @@ export const ModelZooView: React.FC = () => {
         <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 flex items-start gap-3">
           <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <span className="font-bold text-slate-200">Pipeline de Tensores & EmbeddingAdapter:</span>
+            <span className="font-bold text-slate-200">Pipeline de Tensores & Ingestão:</span>
             <p className="leading-relaxed">
-              {selectedModel.adapterInfo[language]} Os tensores geoespaciais são processados sem downsampling ou compressão destrutiva para RGB, mantendo a integridade das 64 bandas espectrais do Google Satellite Embedding V1.
+              {selectedModel.adapterInfo[language]} Os tensores geoespaciais são processados sem compressão destrutiva, mantendo a integridade das bandas espectrais de superfície Sentinel-2 L2A (RGB, RedEdge 705nm, NIR 842nm e SWIR 1610nm).
             </p>
           </div>
         </div>

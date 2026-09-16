@@ -74,44 +74,27 @@ Todos os endpoints operam em `/api` sob o prefixo `/api/v1`, garantindo compatib
 - **`POST /api/auth/logout`**
   - Encerra a sessão ativa.
 
-### 2. Inferência & Classificação LULC
+### 2. Pipeline Geoespacial Real & Inferência LULC (v4)
 
-- **`POST /api/v1/predict`**
-  - Submissão de coordenadas geográficas ou matriz de tensores para inferência de uso do solo.
-  - **Payload de exemplo:**
-    ```json
-    {
-      "model_name": "hybrid_cnn_vit",
-      "use_adapter_64_bands": true,
-      "coordinates": [-55.72, -12.54],
-      "sensor": "GoogleSatelliteEmbedding_v1",
-      "mosaic_year": 2024,
-      "return_attention_map": true
-    }
-    ```
-  - **Resposta de exemplo:**
-    ```json
-    {
-      "status": "success",
-      "inference_time_ms": 32.4,
-      "model": "hybrid_cnn_vit_64ch_prod",
-      "primary_prediction": {
-        "class_id": "AnnualCrop",
-        "class_name": "Lavoura Anual (Soja / Milho)",
-        "confidence": 0.9942
-      },
-      "top_classes": [
-        { "class_id": "AnnualCrop", "probability": 0.9942 },
-        { "class_id": "Pasture", "probability": 0.0035 },
-        { "class_id": "HerbaceousVegetation", "probability": 0.0012 }
-      ],
-      "tensor_metadata": {
-        "input_channels": 64,
-        "spatial_resolution_meters": 10.0,
-        "crs": "EPSG:4326"
-      }
-    }
-    ```
+- **`POST /api/v1/analysis`**
+  - Enfileira uma execução assíncrona na pipeline geoespacial v4.
+  - Valida BBox/GeoJSON, consulta cenas Sentinel-2 via STAC/GEE, processa tensores espectrais e executa classificação LULC.
+  - Retorna `jobId` para acompanhamento de progresso.
+
+- **`GET /api/v1/analysis/:id/status`**
+  - Consulta o estado e progresso em tempo real da pipeline (`queued`, `validating_roi`, `searching_satellite`, `acquiring_raster`, `computing_indices`, `running_inference`, `spatial_statistics`, `generating_evidence`, `completed`).
+
+- **`GET /api/v1/analysis/:id/result`**
+  - Retorna o resultado analítico consolidado (métricas espectrais NDVI/NDRE/EVI, hectares por classe, conformidade CAR, auditoria de carbono IPCC/MCTI e proveniência).
+
+- **`GET /api/v1/analysis/:id/geojson`**
+  - Exporta os vetores de polígonos de classificação LULC em padrão GeoJSON RFC 7946 (EPSG:4326).
+
+- **`POST /api/v1/satellite/search`**
+  - Consulta cenas reais de satélite Sentinel-2 L2A via catálogo STAC público (Earth Search AWS) ou Google Earth Engine filtradas por geometria, data e cobertura de nuvens.
+
+- **`GET /api/v1/providers/status`**
+  - Diagnóstico em tempo real da conectividade com provedores (Earth Engine, STAC Sentinel-2, Motor de Inferência).
 
 ### 3. Análise Espacial de Área de Interesse (ROI)
 

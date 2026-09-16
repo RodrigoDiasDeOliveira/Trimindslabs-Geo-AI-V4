@@ -8,15 +8,13 @@ import {
   KeyRound, 
   ArrowRight, 
   AlertCircle, 
-  Satellite, 
-  Eye, 
-  FileText, 
   CheckCircle2,
-  Info
+  Info,
+  Server
 } from 'lucide-react';
 
 export const LoginView: React.FC = () => {
-  const { login } = useAuth();
+  const { login, authConfig } = useAuth();
   const { language } = useLanguage();
 
   const [selectedRole, setSelectedRole] = useState<UserRole>('operador');
@@ -24,25 +22,27 @@ export const LoginView: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = login(selectedRole, password);
-      setIsLoading(false);
+    try {
+      const result = await login(selectedRole, password);
       if (!result.success && result.error) {
         setErrorMessage(result.error);
       }
-    }, 350);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRoleQuickSelect = (role: UserRole) => {
     setSelectedRole(role);
-    setPassword(role === 'admin' ? 'agentic' : 'funcionario');
     setErrorMessage(null);
   };
+
+  const isAuthDisabled = authConfig.mode === 'AUTH_DISABLED';
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-12 relative overflow-hidden font-sans">
@@ -62,7 +62,7 @@ export const LoginView: React.FC = () => {
             Triminds Geo AI Enterprise
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto">
-            Plataforma de Classificação LULC com Google Satellite Embedding 64 Bandas
+            Plataforma Geoespacial Operacional • Sentinel-2 L2A & Google Earth Engine
           </p>
         </div>
 
@@ -72,13 +72,27 @@ export const LoginView: React.FC = () => {
             <div className="flex items-center gap-2">
               <Lock className="w-4 h-4 text-emerald-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                Acesso Seguro • Controle de Acesso (RBAC)
+                Acesso Autenticado • RBAC
               </span>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
-              v2.4.0
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+              isAuthDisabled
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+            }`}>
+              {authConfig.mode}
             </span>
           </div>
+
+          {isAuthDisabled && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2">
+              <Server className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <strong className="block font-semibold">Modo AUTH_DISABLED Ativo</strong>
+                Nenhuma variável <code className="bg-black/30 px-1 py-0.5 rounded">ADMIN_PASSWORD</code> configurada no ambiente. Selecione o perfil desejado e clique em Entrar para acesso direto.
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Role Selection */}
@@ -103,7 +117,7 @@ export const LoginView: React.FC = () => {
                   </div>
                   <div className="font-bold text-xs text-slate-100">Operador</div>
                   <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">
-                    Busca & manipulação de imagens (sem relatórios)
+                    Seleção de ROI & busca de imagens
                   </div>
                 </button>
 
@@ -123,37 +137,36 @@ export const LoginView: React.FC = () => {
                   </div>
                   <div className="font-bold text-xs text-slate-100">Administrador</div>
                   <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">
-                    Acesso total + emissão de relatórios executivos
+                    Acesso irrestrito & relatórios executivos
                   </div>
                 </button>
               </div>
             </div>
 
-            {/* Password input */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-slate-300">
-                  Senha de Acesso
-                </label>
-                <span className="text-[11px] font-mono text-slate-500">
-                  {selectedRole === 'admin' ? 'Senha: agentic' : 'Senha: funcionario'}
-                </span>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <KeyRound className="w-4 h-4 text-slate-500" />
+            {/* Password input (only if auth is enabled) */}
+            {!isAuthDisabled && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-300">
+                    Senha do Ambiente
+                  </label>
                 </div>
-                <input
-                  id="input-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={`Digite a senha para ${selectedRole}`}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <KeyRound className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <input
+                    id="input-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={`Digite a senha de ${selectedRole}`}
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {errorMessage && (
               <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2">
@@ -187,16 +200,16 @@ export const LoginView: React.FC = () => {
           <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl space-y-2 text-[11px] text-slate-400">
             <div className="flex items-center gap-1.5 font-bold text-slate-300">
               <Info className="w-3.5 h-3.5 text-sky-400" />
-              <span>Regras de Permissão RBAC:</span>
+              <span>Controle de Acesso Baseado em Papéis (RBAC):</span>
             </div>
             <div className="space-y-1 font-mono text-[10px]">
               <div className="flex justify-between items-center bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
                 <span className="text-slate-300">👤 Operador:</span>
-                <span className="text-emerald-400">senha: <span className="underline font-bold">funcionario</span> (Busca/Imagens)</span>
+                <span className="text-emerald-400">Seleção de ROI, busca de cenas e execução de pipeline</span>
               </div>
               <div className="flex justify-between items-center bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                <span className="text-slate-300">🛡️ Admin:</span>
-                <span className="text-purple-400">senha: <span className="underline font-bold">agentic</span> (Total + Relatórios)</span>
+                <span className="text-slate-300">🛡️ Administrador:</span>
+                <span className="text-purple-400">Permissão para emissão de parecer executivo e auditoria</span>
               </div>
             </div>
           </div>
@@ -204,7 +217,7 @@ export const LoginView: React.FC = () => {
 
         {/* Security watermark */}
         <p className="text-center text-[11px] text-slate-500 font-mono">
-          Autenticação em conformidade com ISO 27001 & SOC 2 Type II
+          Tokens assinados via HMAC-SHA256 • Verificação no servidor
         </p>
       </div>
     </div>
