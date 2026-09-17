@@ -7,7 +7,8 @@ import {
   EyeOff, 
   AlertCircle, 
   ArrowRight, 
-  ShieldCheck 
+  ShieldCheck,
+  Satellite
 } from 'lucide-react';
 
 export const LoginView: React.FC = () => {
@@ -52,14 +53,14 @@ export const LoginView: React.FC = () => {
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl shadow-emerald-500/5 mb-2">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-slate-950 font-black text-xl shadow-inner">
-              <ShieldCheck className="w-6 h-6 text-slate-950" />
+              <Satellite className="w-6 h-6 text-slate-950 stroke-[2.5]" />
             </div>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Triminds Geo AI V4
+            Triminds <span className="text-emerald-400">Geo AI</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto">
-            Plataforma Geoespacial Operacional • Sentinel-2 L2A & Governança
+            Plataforma Geoespacial de Observação da Terra & Classificação LULC
           </p>
         </div>
 
