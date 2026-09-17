@@ -56,7 +56,7 @@ export const LoginView: React.FC = () => {
             </div>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Triminds Ecosystem Audit
+            Triminds Geo AI V4
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto">
             Plataforma Geoespacial Operacional • Sentinel-2 L2A & Governança

@@ -101,26 +101,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           password
         })
       });
-    } catch {
-      // True network/transport layer failure (server offline, DNS fail, CORS refused)
+    } catch (err: any) {
+      // True network/transport layer failure (server offline, DNS fail, CORS refused, connection dropped)
       return {
         success: false,
-        error: 'Unable to connect to authentication server. Please try again.'
+        error: 'Unable to connect to authentication server. Please check your network connection.'
       };
     }
 
-    // Safely parse JSON if returned
-    let data: any = null;
+    // Inspect Content-Type before parsing JSON
     const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const isJson = contentType.includes('application/json');
+    let data: any = null;
+
+    if (isJson) {
       try {
         data = await res.json();
       } catch {
-        data = null;
+        return {
+          success: false,
+          error: `Invalid JSON response received from server (HTTP ${res.status}).`
+        };
       }
     }
 
-    // HTTP 401: Invalid credentials
+    // 1. HTTP 401: Invalid credentials
     if (res.status === 401) {
       return {
         success: false,
@@ -128,7 +133,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // HTTP 503: Authentication service unavailable / unconfigured
+    // 2. HTTP 403: Forbidden
+    if (res.status === 403) {
+      return {
+        success: false,
+        error: data?.error || 'Access denied (HTTP 403).'
+      };
+    }
+
+    // 3. HTTP 404: Endpoint not found
+    if (res.status === 404) {
+      return {
+        success: false,
+        error: 'Authentication endpoint not found (HTTP 404). Please verify server deployment.'
+      };
+    }
+
+    // 4. HTTP 405: Method Not Allowed (e.g. static server intercepted POST)
+    if (res.status === 405) {
+      return {
+        success: false,
+        error: 'Method Not Allowed (HTTP 405). The server routing is rejecting POST requests to /api/auth/login.'
+      };
+    }
+
+    // 5. HTTP 500: Internal Server Error
+    if (res.status === 500) {
+      return {
+        success: false,
+        error: data?.error || 'Authentication server internal error (HTTP 500).'
+      };
+    }
+
+    // 6. HTTP 502 / 504: Bad Gateway / Gateway Timeout
+    if (res.status === 502 || res.status === 504) {
+      return {
+        success: false,
+        error: `Authentication server gateway error (HTTP ${res.status}). Service may be starting up.`
+      };
+    }
+
+    // 7. HTTP 503: Authentication service unavailable / unconfigured
     if (res.status === 503) {
       return {
         success: false,
@@ -136,17 +181,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // Non-OK responses (e.g. 405 Method Not Allowed, 502 Bad Gateway, 404 Not Found)
-    if (!res.ok || !data || !data.authenticated) {
-      if (res.status === 405 || res.status === 502 || res.status === 504 || res.status === 404) {
+    // 8. Non-OK or Non-JSON responses
+    if (!res.ok) {
+      if (!isJson) {
         return {
           success: false,
-          error: 'Unable to connect to authentication server. Please try again.'
+          error: `Server returned unexpected non-JSON response (HTTP ${res.status}).`
         };
       }
       return {
         success: false,
-        error: data?.error || 'Authentication failed. Please try again.'
+        error: data?.error || `Authentication request failed with status ${res.status}.`
+      };
+    }
+
+    if (!data || !data.authenticated || !data.user) {
+      return {
+        success: false,
+        error: data?.error || 'Authentication failed. Invalid response structure from server.'
       };
     }
 
