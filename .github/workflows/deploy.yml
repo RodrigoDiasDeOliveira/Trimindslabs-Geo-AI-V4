@@ -18,11 +18,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies & Build React
+      - name: Install Dependencies & Build Application
         run: |
           npm install --legacy-peer-deps
-          npm install vite@5.4.11 @vitejs/plugin-react@4.3.4 typescript@5.6.3 -D --legacy-peer-deps
-          npx vite build
+          npm run build
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
