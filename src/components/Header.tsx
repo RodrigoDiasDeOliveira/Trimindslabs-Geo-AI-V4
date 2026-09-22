@@ -61,26 +61,16 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             {t.common.liveStatus}
           </span>
-          <span className="hidden sm:inline-block text-slate-600">•</span>
-          <span className="hidden sm:flex items-center gap-1 text-slate-300">
-            <Zap className="w-3 h-3 text-amber-400" />
-            {t.common.gpuAccelerated}
-          </span>
-          <span className="hidden md:inline-block text-slate-600">•</span>
-          <span className="hidden md:flex items-center gap-1 text-sky-300">
-            <Layers className="w-3 h-3 text-sky-400" />
-            {t.common.channels64}
-          </span>
-          <span className="hidden lg:inline-block text-slate-600">•</span>
-          {/* Direct Shortcut to Pick Area on Map */}
+          <span className="text-slate-600">•</span>
+          {/* Direct Shortcut to Pick Area on Map - Always Visible & Functional */}
           <button
             id="btn-quick-pick-map"
             onClick={() => onTabChange('areaAnalysis')}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-[11px] font-semibold transition-all cursor-pointer shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all cursor-pointer shadow-md active:scale-95"
             title="Escolher região no mapa (Google Maps / Earth Engine)"
           >
-            <MapPin className="w-3 h-3 text-emerald-400" />
-            <span>Escolher Área no Mapa (GEE / Maps)</span>
+            <MapPin className="w-3.5 h-3.5 text-slate-950" />
+            <span>Escolher no Mapa</span>
           </button>
         </div>
 

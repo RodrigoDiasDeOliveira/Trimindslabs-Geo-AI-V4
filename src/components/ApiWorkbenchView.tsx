@@ -106,7 +106,7 @@ const ENDPOINTS: EndpointConfig[] = [
     name: 'Iniciar Pipeline Geoespacial Real',
     method: 'POST',
     path: '/api/v1/analysis',
-    description: 'Submete um job assíncrono para processar tensores espectrais reais Sentinel-2 COG, calcular NDVI/NDRE/EVI e LULC.',
+    description: 'Submete um job assíncrono para processar tensores espectrais reais Sentinel-2 COG, calcular NDVI/NDRE/EVI e Cobertura do Solo.',
     defaultPayload: JSON.stringify({
       farmName: "Fazenda Santa Helena",
       regionName: "Sorriso - MT",
@@ -126,7 +126,7 @@ const ENDPOINTS: EndpointConfig[] = [
     name: 'Parecer Agronômico IA (Google GenAI Gemini)',
     method: 'POST',
     path: '/api/v1/ai/report',
-    description: 'Aciona o modelo Gemini 2.5 Flash no servidor para elaborar laudo agronômico e análise de evidências.',
+    description: 'Aciona o modelo Gemini no servidor para elaborar laudo agronômico e análise de evidências.',
     defaultPayload: JSON.stringify({
       farmName: "Fazenda Santa Helena",
       region: "Sorriso - MT",
@@ -136,7 +136,7 @@ const ENDPOINTS: EndpointConfig[] = [
       meanNdre: 0.49,
       carbonStockTon: 185000,
       carStatus: "CONFORME",
-      modelUsed: "Rule-Based Spectral LULC v4"
+      modelUsed: "Rule-Based Spectral LandCover v4"
     }, null, 2),
     mockResponse: {
       success: true,

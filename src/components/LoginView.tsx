@@ -60,7 +60,7 @@ export const LoginView: React.FC = () => {
             Triminds <span className="text-emerald-400">Geo AI</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto">
-            Plataforma Geoespacial de Observação da Terra & Classificação LULC
+            Plataforma Geoespacial de Observação da Terra & Classificação de Uso e Cobertura do Solo
           </p>
         </div>
 

@@ -53,7 +53,10 @@ import {
   Info,
   Calendar,
   Cloud,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Square,
+  Pentagon,
+  Move
 } from 'lucide-react';
 
 export const AreaSelectionView: React.FC = () => {
@@ -429,7 +432,7 @@ export const AreaSelectionView: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `lulc_${farmName.toLowerCase().replace(/\s+/g, '_')}.csv`);
+    link.setAttribute("download", `cobertura_solo_${farmName.toLowerCase().replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -564,42 +567,116 @@ export const AreaSelectionView: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* LEFT COLUMN: Controls, Presets & STAC Search (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
-            {/* Presets Card */}
+            {/* Map Selection & 4-Side Editing Tools */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                  Regiões Pré-configuradas (Brasil)
+                  <Square className="w-3.5 h-3.5 text-emerald-400" />
+                  Ferramentas de Seleção no Mapa
                 </span>
-                <span className="text-[10px] font-mono text-slate-500">WGS84</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                  {drawingMode ? (drawingMode === 'box' ? 'Desenhando Retângulo' : 'Desenhando Polígono') : 'Modo Navegação'}
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
-                {PRESET_REGIONS.map((preset) => {
-                  const isSelected = selectedPreset.id === preset.id && !drawnPolygon;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleSelectPreset(preset)}
-                      className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-emerald-500/15 border-emerald-500 text-white ring-1 ring-emerald-500/40'
-                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="text-slate-100">{preset.name}</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                          {preset.biome}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-                        {preset.farm} • {preset.defaultHectares.toLocaleString('pt-BR')} ha
-                      </div>
-                    </button>
-                  );
-                })}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDrawingMode(drawingMode === 'box' ? null : 'box')}
+                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    drawingMode === 'box'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/40 font-bold'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  <span>Retângulo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDrawingMode(drawingMode === 'polygon' ? null : 'polygon')}
+                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    drawingMode === 'polygon'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/40 font-bold'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <Pentagon className="w-3.5 h-3.5" />
+                  <span>Polígono Livre</span>
+                </button>
+              </div>
+
+              {/* 4-Side Dimension Quick Formatting */}
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800/80 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                  <span className="flex items-center gap-1 text-sky-400">
+                    <Move className="w-3 h-3" />
+                    Ajuste Fino dos 4 Lados
+                  </span>
+                  <span className="text-[10px] text-slate-500">Passo: 0.5 km</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {/* Norte / Sul (Altura) */}
+                  <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-1.5 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">Norte/Sul</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setBboxHeightKm(prev => Math.max(1, Number((prev - 0.5).toFixed(1))))}
+                        className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-rose-400 flex items-center justify-center text-xs font-bold"
+                        title="Diminuir altura do retângulo"
+                      >
+                        -
+                      </button>
+                      <span className="font-mono text-[10px] text-slate-200 w-8 text-center">{bboxHeightKm}km</span>
+                      <button
+                        type="button"
+                        onClick={() => setBboxHeightKm(prev => Math.min(30, Number((prev + 0.5).toFixed(1))))}
+                        className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 flex items-center justify-center text-xs font-bold"
+                        title="Aumentar altura do retângulo"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Leste / Oeste (Largura) */}
+                  <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-1.5 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">Leste/Oeste</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setBboxWidthKm(prev => Math.max(1, Number((prev - 0.5).toFixed(1))))}
+                        className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-rose-400 flex items-center justify-center text-xs font-bold"
+                        title="Diminuir largura do retângulo"
+                      >
+                        -
+                      </button>
+                      <span className="font-mono text-[10px] text-slate-200 w-8 text-center">{bboxWidthKm}km</span>
+                      <button
+                        type="button"
+                        onClick={() => setBboxWidthKm(prev => Math.min(30, Number((prev + 0.5).toFixed(1))))}
+                        className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 flex items-center justify-center text-xs font-bold"
+                        title="Aumentar largura do retângulo"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {drawnPolygon && (
+                  <button
+                    type="button"
+                    onClick={() => setDrawnPolygon(null)}
+                    className="w-full mt-1 py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-amber-300 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Descartar polígono e voltar ao retângulo</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -827,7 +904,7 @@ export const AreaSelectionView: React.FC = () => {
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>Resultado da Classificação LULC: {farmName}</span>
+                      <span>Resultado da Classificação de Cobertura do Solo: {farmName}</span>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
                         {liveAnalysisResult?.compliance.carStatus || currentAnalysis?.results.carStatus}
                       </span>

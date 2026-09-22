@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { 
   GEO_SAMPLES, 
@@ -8,6 +8,12 @@ import {
   DeepLearningModel, 
   LulcClass 
 } from '../data/geoData';
+import { 
+  PRESET_REGIONS, 
+  PresetRegion 
+} from '../data/mapSourcesData';
+import { getSavedAnalyses } from '../utils/analysisStorage';
+import { SavedAreaAnalysis } from '../types';
 import { 
   Play, 
   Cpu, 
@@ -25,16 +31,142 @@ import {
   AlertTriangle,
   RotateCcw,
   Search,
-  Compass
+  Compass,
+  Plus,
+  Trash2,
+  Bookmark,
+  FileText,
+  X,
+  Database,
+  RefreshCw,
+  FolderOpen
 } from 'lucide-react';
 
 interface GeoAiStudioProps {
   onOpenMapSelector?: () => void;
 }
 
+const PRESET_STORAGE_KEY = 'triminds_custom_preset_regions_v1';
+
 export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) => {
   const { language, t } = useLanguage();
 
+  // Source selection modes: 'samples' | 'presets' | 'saved_library'
+  const [sourceMode, setSourceMode] = useState<'samples' | 'presets' | 'saved_library'>('samples');
+
+  // Pre-configured regions state (with add & delete, persisted in localStorage)
+  const [presetList, setPresetList] = useState<PresetRegion[]>(() => {
+    try {
+      const saved = localStorage.getItem(PRESET_STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to load presets from storage', e);
+    }
+    return PRESET_REGIONS;
+  });
+
+  const [selectedPreset, setSelectedPreset] = useState<PresetRegion>(presetList[0]);
+  const [isAddPresetModalOpen, setIsAddPresetModalOpen] = useState<boolean>(false);
+  const [newPresetForm, setNewPresetForm] = useState<{
+    name: string;
+    farm: string;
+    state: string;
+    biome: string;
+    lat: number;
+    lng: number;
+    hectares: number;
+    description: string;
+  }>({
+    name: '',
+    farm: '',
+    state: 'MT',
+    biome: 'Cerrado',
+    lat: -12.50,
+    lng: -55.70,
+    hectares: 5000,
+    description: ''
+  });
+
+  // Saved analyses library state
+  const [savedAnalyses, setSavedAnalyses] = useState<SavedAreaAnalysis[]>([]);
+  const [selectedSavedAnalysis, setSelectedSavedAnalysis] = useState<SavedAreaAnalysis | null>(null);
+
+  // Load saved analyses when switching to saved_library
+  useEffect(() => {
+    if (sourceMode === 'saved_library') {
+      const list = getSavedAnalyses();
+      setSavedAnalyses(list);
+      if (list.length > 0 && !selectedSavedAnalysis) {
+        setSelectedSavedAnalysis(list[0]);
+      }
+    }
+  }, [sourceMode]);
+
+  // Save presets to localStorage when modified
+  const savePresets = (newList: PresetRegion[]) => {
+    setPresetList(newList);
+    try {
+      localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(newList));
+    } catch (e) {
+      console.error('Failed to save presets to storage', e);
+    }
+  };
+
+  const handleAddPreset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPresetForm.name || !newPresetForm.farm) return;
+
+    const newRegion: PresetRegion = {
+      id: `custom_preset_${Date.now()}`,
+      name: newPresetForm.name,
+      farm: newPresetForm.farm,
+      state: newPresetForm.state,
+      biome: newPresetForm.biome,
+      center: { lat: newPresetForm.lat, lng: newPresetForm.lng },
+      bbox: [
+        Number((newPresetForm.lng - 0.05).toFixed(4)),
+        Number((newPresetForm.lat - 0.04).toFixed(4)),
+        Number((newPresetForm.lng + 0.05).toFixed(4)),
+        Number((newPresetForm.lat + 0.04).toFixed(4))
+      ],
+      defaultHectares: newPresetForm.hectares,
+      previewUrl: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80',
+      description: newPresetForm.description || `Talhão agrícola sob monitoramento na região de ${newPresetForm.name}.`
+    };
+
+    const updated = [newRegion, ...presetList];
+    savePresets(updated);
+    setSelectedPreset(newRegion);
+    setIsAddPresetModalOpen(false);
+    setNewPresetForm({
+      name: '',
+      farm: '',
+      state: 'MT',
+      biome: 'Cerrado',
+      lat: -12.50,
+      lng: -55.70,
+      hectares: 5000,
+      description: ''
+    });
+    setUploadFeedback(`Região "${newRegion.name}" adicionada com sucesso!`);
+    setTimeout(() => setUploadFeedback(null), 4000);
+  };
+
+  const handleDeletePreset = (id: string, name: string) => {
+    if (presetList.length <= 1) {
+      alert('É necessário manter pelo menos uma região pré-configurada.');
+      return;
+    }
+    const filtered = presetList.filter(p => p.id !== id);
+    savePresets(filtered);
+    if (selectedPreset.id === id) {
+      setSelectedPreset(filtered[0]);
+    }
+    setUploadFeedback(`Região "${name}" excluída.`);
+    setTimeout(() => setUploadFeedback(null), 3500);
+  };
+
+  // Main studio state
   const [selectedSample, setSelectedSample] = useState<GeoSample>(GEO_SAMPLES[0]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedModelId, setSelectedModelId] = useState<string>('resnet50');
@@ -42,38 +174,101 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
   const [spectralTab, setSpectralTab] = useState<'rgb' | 'nir' | 'ndvi' | 'ndre' | 'embedding'>('rgb');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [hasInferred, setHasInferred] = useState<boolean>(true);
-  const [customFile, setCustomFile] = useState<{ name: string; size: string; channels: number } | null>(null);
+  const [customFile, setCustomFile] = useState<{ 
+    name: string; 
+    size: string; 
+    channels: number;
+    format: string;
+  } | null>(null);
+  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
 
   const selectedModel = DEEP_LEARNING_MODELS.find(m => m.id === selectedModelId) || DEEP_LEARNING_MODELS[0];
   const primaryClass = LULC_CLASSES.find(c => c.id === selectedSample.defaultClassId) || LULC_CLASSES[0];
 
-  const handleRunInference = () => {
+  const handleRunInference = (overrideLatency?: number) => {
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
       setHasInferred(true);
-    }, 700);
+    }, overrideLatency || 650);
   };
 
+  // Enhanced File Upload Handler (JPG, PNG, GeoTIFF, Tensor, NPY, PT, BIN)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setCustomFile({
-        name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-        channels: file.name.toLowerCase().includes('64') || file.name.toLowerCase().includes('emb') ? 64 : 12
-      });
-      // Set to sample 0 with custom badge
+    if (!file) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    let formatLabel = 'Imagem Raster';
+    let channels = 3;
+
+    if (['tif', 'tiff', 'geotiff', 'cog'].includes(ext)) {
+      formatLabel = 'GeoTIFF Multiespectral (COG)';
+      channels = 12;
+    } else if (['npy', 'tensor', 'pt', 'bin'].includes(ext)) {
+      formatLabel = 'Tensor de Embeddings (64 Canais)';
+      channels = 64;
+    } else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      formatLabel = `Foto Satelital (${ext.toUpperCase()})`;
+      channels = 4;
+    }
+
+    setCustomFile({
+      name: file.name,
+      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      channels,
+      format: formatLabel
+    });
+
+    // If image format, read as data URL for actual visualization
+    if (file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const resultUrl = event.target?.result as string;
+        setUploadedPreviewUrl(resultUrl);
+
+        setSelectedSample({
+          ...GEO_SAMPLES[0],
+          id: `upload-${Date.now()}`,
+          name: {
+            'pt-BR': `Imagem Carregada: ${file.name}`,
+            en: `Uploaded Image: ${file.name}`,
+            es: `Imagen Subida: ${file.name}`
+          },
+          previewUrl: resultUrl,
+          channels
+        });
+
+        // Trigger automatic inference and visualization
+        handleRunInference(700);
+        setUploadFeedback(`Foto "${file.name}" carregada, analisada e visualizada com sucesso!`);
+        setTimeout(() => setUploadFeedback(null), 5000);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // For GeoTIFF / Tensors
+      const syntheticPreview = 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80';
+      setUploadedPreviewUrl(syntheticPreview);
+
       setSelectedSample({
         ...GEO_SAMPLES[0],
-        id: 'custom-uploaded',
+        id: `upload-${Date.now()}`,
         name: {
-          'pt-BR': `Arquivo GeoTIFF: ${file.name}`,
-          en: `GeoTIFF Upload: ${file.name}`,
-          es: `Archivo GeoTIFF: ${file.name}`
+          'pt-BR': `${formatLabel}: ${file.name}`,
+          en: `${formatLabel}: ${file.name}`,
+          es: `${formatLabel}: ${file.name}`
         },
-        channels: 64
+        channels
       });
+
+      if (channels === 64) {
+        setSpectralTab('embedding');
+      }
+
+      handleRunInference(800);
+      setUploadFeedback(`Arquivo ${formatLabel} "${file.name}" importado e inferência de cobertura do solo executada!`);
+      setTimeout(() => setUploadFeedback(null), 5000);
     }
   };
 
@@ -106,147 +301,375 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
           </p>
         </div>
 
-        <button
-          id="btn-run-inference-main"
-          onClick={handleRunInference}
-          disabled={isProcessing}
-          className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl font-semibold text-sm text-slate-950 bg-emerald-400 hover:bg-emerald-300 active:scale-95 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
-        >
-          {isProcessing ? (
-            <>
-              <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
-              <span>{t.common.running}</span>
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4 fill-current" />
-              <span>{t.common.runInference}</span>
-            </>
+        <div className="flex items-center gap-3">
+          {sourceMode === 'saved_library' && (
+            <button
+              type="button"
+              onClick={() => handleRunInference(500)}
+              disabled={isProcessing}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs text-sky-950 bg-sky-400 hover:bg-sky-300 transition-all shadow-md shadow-sky-500/20 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+              <span>Reavaliar Classificação</span>
+            </button>
           )}
-        </button>
+
+          <button
+            id="btn-run-inference-main"
+            onClick={() => handleRunInference()}
+            disabled={isProcessing}
+            className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl font-semibold text-sm text-slate-950 bg-emerald-400 hover:bg-emerald-300 active:scale-95 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+          >
+            {isProcessing ? (
+              <>
+                <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                <span>{t.common.running}</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 fill-current" />
+                <span>{t.common.runInference}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Feedback Toast */}
+      {uploadFeedback && (
+        <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-xl text-xs flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{uploadFeedback}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setUploadFeedback(null)} 
+            className="text-slate-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input Selection & Model Configuration */}
         <div className="lg:col-span-5 space-y-6">
           {/* 1. Input Source Selection */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                 {t.studio.inputSourceTitle}
               </h2>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                {selectedSample.sensor === 'GoogleSatelliteEmbedding' ? '64-Bands Embedding' : 'Multispectral'}
+                {customFile ? customFile.format : (selectedSample.sensor === 'GoogleSatelliteEmbedding' ? '64-Bands Embedding' : 'Multispectral')}
               </span>
             </div>
 
-            {/* Sample Selector Buttons with Real-time Search */}
-            <div className="space-y-2">
-              {onOpenMapSelector && (
+            {/* Source Mode Switcher Bar */}
+            <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs">
+              {/* Note: When in 'saved_library', the user can toggle back to 'samples'. 'presets' only appears outside of 'saved_library' */}
+              <button
+                type="button"
+                onClick={() => setSourceMode('samples')}
+                className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition-all cursor-pointer text-center ${
+                  sourceMode === 'samples' 
+                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Amostras Satelitais
+              </button>
+
+              {sourceMode !== 'saved_library' ? (
                 <button
-                  id="btn-studio-pick-map"
                   type="button"
-                  onClick={onOpenMapSelector}
-                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-sky-500/20 hover:from-emerald-500 hover:to-teal-400 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer group"
+                  onClick={() => setSourceMode('presets')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition-all cursor-pointer text-center ${
+                    sourceMode === 'presets' 
+                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
                 >
-                  <Compass className="w-4 h-4 text-emerald-400 group-hover:text-slate-950 transition-colors" />
-                  <span>Escolher Região no Mapa (Google Earth Engine & Maps)</span>
+                  Regiões Pré-configuradas
                 </button>
-              )}
+              ) : null}
 
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-400">
-                  {t.studio.selectBiomeSample}
-                </label>
-                <span className="text-[10px] text-emerald-400 font-mono font-medium">
-                  {GEO_SAMPLES.filter(s => s.name[language].toLowerCase().includes(searchTerm.toLowerCase()) || s.region.toLowerCase().includes(searchTerm.toLowerCase())).length} imagens disponíveis
-                </span>
-              </div>
-
-              {/* Search input for operator & admin */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="w-3.5 h-3.5 text-slate-500" />
-                </div>
-                <input
-                  id="input-search-images"
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar imagens de satélite por bioma ou talhão..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
-                {GEO_SAMPLES.filter(s => 
-                  s.name[language].toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  s.region.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  s.biome[language].toLowerCase().includes(searchTerm.toLowerCase())
-                ).map(sample => {
-                  const isSelected = selectedSample.id === sample.id;
-                  return (
-                    <button
-                      key={sample.id}
-                      id={`sample-select-${sample.id}`}
-                      onClick={() => {
-                        setSelectedSample(sample);
-                        setCustomFile(null);
-                      }}
-                      className={`text-left p-3 rounded-xl border transition-all flex items-start justify-between gap-3 ${
-                        isSelected
-                          ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm'
-                          : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-800/40'
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        <div className="text-xs font-bold text-slate-200">
-                          {sample.name[language]}
-                        </div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                          <MapPin className="w-3 h-3 text-slate-500" />
-                          <span>{sample.region}</span>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300 shrink-0">
-                        {sample.channels} CH
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={() => setSourceMode('saved_library')}
+                className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                  sourceMode === 'saved_library' 
+                    ? 'bg-sky-500 text-slate-950 font-bold shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Bookmark className="w-3 h-3" />
+                <span>Biblioteca Salva</span>
+              </button>
             </div>
 
-            {/* Drag & Drop File Upload Box */}
-            <div className="border border-dashed border-slate-700 hover:border-emerald-500/50 rounded-xl p-4 text-center transition-colors bg-slate-950/40">
+            {/* CASE 1: PRE-CONFIGURED REGIONS (Shows only when sourceMode === 'presets') */}
+            {sourceMode === 'presets' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                    Regiões Cadastradas ({presetList.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddPresetModalOpen(true)}
+                    className="py-1 px-2.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-bold border border-emerald-500/30 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Adicionar Região</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
+                  {presetList.map((preset) => {
+                    const isSelected = selectedPreset.id === preset.id;
+                    return (
+                      <div
+                        key={preset.id}
+                        className={`p-2.5 rounded-xl border transition-all flex items-start justify-between gap-2 ${
+                          isSelected
+                            ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm'
+                            : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPreset(preset);
+                            setSelectedSample({
+                              ...GEO_SAMPLES[0],
+                              id: preset.id,
+                              name: {
+                                'pt-BR': `${preset.name} - ${preset.farm}`,
+                                en: `${preset.name} - ${preset.farm}`,
+                                es: `${preset.name} - ${preset.farm}`
+                              },
+                              region: `${preset.state} • ${preset.biome}`,
+                              previewUrl: preset.previewUrl
+                            });
+                            handleRunInference(500);
+                          }}
+                          className="flex-1 text-left cursor-pointer"
+                        >
+                          <div className="text-xs font-bold text-slate-200">{preset.name}</div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            {preset.farm} • {preset.state} • {preset.defaultHectares.toLocaleString('pt-BR')} ha
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">{preset.biome}</div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeletePreset(preset.id, preset.name);
+                          }}
+                          className="p-1 text-slate-500 hover:text-rose-400 transition-colors cursor-pointer rounded"
+                          title="Excluir região pré-configurada"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* CASE 2: SAVED LIBRARY (When clicked, pre-configured regions option is hidden) */}
+            {sourceMode === 'saved_library' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-sky-400 flex items-center gap-1.5">
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    Análises Salvas na Biblioteca ({savedAnalyses.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = getSavedAnalyses();
+                      setSavedAnalyses(updated);
+                    }}
+                    className="p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+                    title="Recarregar análises salvas"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {savedAnalyses.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
+                    Nenhuma análise salva encontrada. Crie e salve análises no menu &quot;Escolher no Mapa&quot;.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {savedAnalyses.map((item) => {
+                      const isSelected = selectedSavedAnalysis?.id === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSavedAnalysis(item);
+                            setSelectedSample({
+                              ...GEO_SAMPLES[0],
+                              id: item.id,
+                              name: {
+                                'pt-BR': item.title,
+                                en: item.title,
+                                es: item.title
+                              },
+                              region: `${item.region} • ${item.farmName}`,
+                              defaultClassId: item.results.classBreakdown[0]?.classId === 'ac' ? 'AnnualCrop' : 'Forest'
+                            });
+                            handleRunInference(450);
+                          }}
+                          className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-sky-500/10 border-sky-500/40 shadow-sm ring-1 ring-sky-500/30'
+                              : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-200">{item.title}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-sky-300">
+                              {item.areaHectares.toLocaleString('pt-BR')} ha
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
+                            <span>{item.farmName} • {item.region}</span>
+                            <span className="text-[10px] font-mono text-emerald-400">{item.results.carStatus}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* CASE 3: SAMPLES (Default S2 Biome Datasets) */}
+            {sourceMode === 'samples' && (
+              <div className="space-y-2">
+                {onOpenMapSelector && (
+                  <button
+                    id="btn-studio-pick-map"
+                    type="button"
+                    onClick={onOpenMapSelector}
+                    className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-sky-500/20 hover:from-emerald-500 hover:to-teal-400 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer group"
+                  >
+                    <Compass className="w-4 h-4 text-emerald-400 group-hover:text-slate-950 transition-colors" />
+                    <span>Escolher Região no Mapa (Google Earth Engine & Maps)</span>
+                  </button>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-400">
+                    {t.studio.selectBiomeSample}
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-mono font-medium">
+                    {GEO_SAMPLES.filter(s => s.name[language].toLowerCase().includes(searchTerm.toLowerCase()) || s.region.toLowerCase().includes(searchTerm.toLowerCase())).length} disponíveis
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                  <input
+                    id="input-search-images"
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar imagens de satélite por bioma ou talhão..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
+                  {GEO_SAMPLES.filter(s => 
+                    s.name[language].toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    s.region.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    s.biome[language].toLowerCase().includes(searchTerm.toLowerCase())
+                  ).map(sample => {
+                    const isSelected = selectedSample.id === sample.id && !customFile;
+                    return (
+                      <button
+                        key={sample.id}
+                        id={`sample-select-${sample.id}`}
+                        onClick={() => {
+                          setSelectedSample(sample);
+                          setCustomFile(null);
+                          setUploadedPreviewUrl(null);
+                        }}
+                        className={`text-left p-3 rounded-xl border transition-all flex items-start justify-between gap-3 cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-500/10 border-emerald-500/40 shadow-sm'
+                            : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-800/40'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold text-slate-200">
+                            {sample.name[language]}
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                            <MapPin className="w-3 h-3 text-slate-500" />
+                            <span>{sample.region}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300 shrink-0">
+                          {sample.channels} CH
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ENHANCED FILE UPLOAD: Supports JPG, GeoTIFF, Tensor, NPY, PNG */}
+            <div className="border border-dashed border-slate-700 hover:border-emerald-500/50 rounded-xl p-4 text-center transition-colors bg-slate-950/40 space-y-2">
               <input
                 type="file"
                 id="file-upload-input"
-                accept=".tif,.tiff,.cog,.npy,.png,.jpg"
+                accept=".jpg,.jpeg,.png,.webp,.tif,.tiff,.geotiff,.cog,.npy,.tensor,.pt,.bin"
                 onChange={handleFileUpload}
                 className="hidden"
               />
               <label htmlFor="file-upload-input" className="cursor-pointer block space-y-2">
                 <Upload className="w-6 h-6 text-emerald-400 mx-auto" />
-                <p className="text-xs text-slate-300 font-medium">
-                  {t.studio.dropzoneText}
+                <p className="text-xs text-slate-300 font-semibold">
+                  Subir Imagem Satelital, GeoTIFF ou Tensor
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  {t.studio.orClickUpload}
+                  Formatos aceitos: <strong>JPG, PNG, GeoTIFF (.tif), Tensor (.npy, .pt, .tensor)</strong>
                 </p>
               </label>
+
               {customFile && (
-                <div className="mt-3 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 flex items-center justify-between">
-                  <span className="truncate max-w-[200px]">{customFile.name}</span>
-                  <span className="font-mono text-[10px]">{customFile.size}</span>
+                <div className="mt-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 flex items-center justify-between">
+                  <div className="truncate text-left max-w-[220px]">
+                    <div className="font-bold truncate">{customFile.name}</div>
+                    <div className="text-[10px] text-slate-400">{customFile.format} • {customFile.channels} canais</div>
+                  </div>
+                  <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-emerald-400">
+                    {customFile.size}
+                  </span>
                 </div>
               )}
             </div>
           </div>
 
           {/* 2. Deep Learning Model Configuration */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-sky-400"></span>
               {t.studio.modelSectionTitle}
@@ -264,7 +687,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                       key={model.id}
                       id={`model-select-${model.id}`}
                       onClick={() => setSelectedModelId(model.id)}
-                      className={`w-full text-left p-3 rounded-xl border transition-all ${
+                      className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-sky-500/10 border-sky-500/40 shadow-sm'
                           : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
@@ -322,7 +745,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
         {/* Right Column: Spectral Visualizer & Inference Output */}
         <div className="lg:col-span-7 space-y-6">
           {/* 3. Spectral Analysis & Vegetation Indices */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-amber-400"></span>
@@ -334,7 +757,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                 <button
                   id="tab-spectral-rgb"
                   onClick={() => setSpectralTab('rgb')}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded font-medium transition-all cursor-pointer ${
                     spectralTab === 'rgb' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -343,7 +766,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                 <button
                   id="tab-spectral-nir"
                   onClick={() => setSpectralTab('nir')}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded font-medium transition-all cursor-pointer ${
                     spectralTab === 'nir' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -352,7 +775,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                 <button
                   id="tab-spectral-ndvi"
                   onClick={() => setSpectralTab('ndvi')}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded font-medium transition-all cursor-pointer ${
                     spectralTab === 'ndvi' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -361,7 +784,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                 <button
                   id="tab-spectral-embedding"
                   onClick={() => setSpectralTab('embedding')}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded font-medium transition-all cursor-pointer ${
                     spectralTab === 'embedding' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -370,14 +793,16 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
               </div>
             </div>
 
-            {/* Satellite Viewport Area */}
+            {/* Satellite / Uploaded Viewport Area */}
             <div className="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 aspect-video flex items-center justify-center group">
               {spectralTab === 'embedding' ? (
                 /* 64-Band Embedding Profile Visualization */
                 <div className="w-full h-full p-4 flex flex-col justify-between bg-slate-950">
                   <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-2">
-                    <span className="font-mono text-sky-400">GoogleSatelliteEmbedding_v1 Tensor (64, 64, 64)</span>
-                    <span className="text-[11px] text-emerald-400">Dimension Vector Space [-1.0 to +1.0]</span>
+                    <span className="font-mono text-sky-400">
+                      {customFile ? `${customFile.format} (64 Canais)` : 'GoogleSatelliteEmbedding_v1 Tensor (64, 64, 64)'}
+                    </span>
+                    <span className="text-[11px] text-emerald-400">Espaço Vetorial Latente [-1.0 a +1.0]</span>
                   </div>
                   {/* Vector Bar Spectrum */}
                   <div className="grid grid-cols-16 gap-1 h-32 items-end py-2">
@@ -400,14 +825,14 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                   <div className="text-[11px] text-slate-400 flex items-center justify-between">
                     <span>NDVI: <strong className="text-emerald-300">{selectedSample.simulatedBands.ndvi}</strong></span>
                     <span>NDRE: <strong className="text-emerald-300">{selectedSample.simulatedBands.ndre}</strong></span>
-                    <span>NIR Reflectance: <strong className="text-sky-300">{(selectedSample.simulatedBands.nir * 100).toFixed(0)}%</strong></span>
+                    <span>Refletância NIR: <strong className="text-sky-300">{(selectedSample.simulatedBands.nir * 100).toFixed(0)}%</strong></span>
                   </div>
                 </div>
               ) : (
                 /* Image View with Simulated Filter overlays */
                 <div className="w-full h-full relative">
                   <img
-                    src={selectedSample.previewUrl}
+                    src={uploadedPreviewUrl || selectedSample.previewUrl}
                     alt={selectedSample.name[language]}
                     className={`w-full h-full object-cover transition-all duration-300 ${
                       spectralTab === 'nir' ? 'contrast-125 saturate-200 hue-rotate-90' :
@@ -416,9 +841,14 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                   />
                   {/* Overlay badge with sample info */}
                   <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-sm border border-slate-700/60 rounded-lg px-3 py-1.5 text-xs text-white">
-                    <span className="font-semibold">{selectedSample.region}</span>
-                    <span className="text-slate-400 text-[11px] block">{selectedSample.biome[language]}</span>
+                    <span className="font-semibold">
+                      {customFile ? customFile.name : selectedSample.region}
+                    </span>
+                    <span className="text-slate-400 text-[11px] block">
+                      {customFile ? customFile.format : selectedSample.biome[language]}
+                    </span>
                   </div>
+
                   <div className="absolute bottom-3 right-3 bg-slate-950/80 backdrop-blur-sm border border-slate-700/60 rounded-lg px-3 py-1 text-[11px] font-mono text-emerald-400">
                     BBox: [{selectedSample.coordinates.bbox.join(', ')}]
                   </div>
@@ -428,14 +858,14 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
           </div>
 
           {/* 4. Inference Results & Class Probabilities */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-purple-400"></span>
                 {t.studio.inferenceResultsTitle}
               </h2>
               <span className="text-xs text-slate-400 font-mono">
-                {t.common.latency}: {selectedModel.inferenceLatencyMs}ms (CPU Deterministic Engine)
+                {t.common.latency}: {selectedModel.inferenceLatencyMs}ms (Processamento Imediato)
               </span>
             </div>
 
@@ -449,68 +879,191 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                   {primaryClass.code}
                 </div>
                 <div>
-                  <span className="text-xs text-slate-400">{t.studio.primaryClassDetected}</span>
-                  <div className="text-base sm:text-lg font-extrabold text-white">
-                    {primaryClass.name[language]}
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
-                    {primaryClass.description[language]}
-                  </p>
+                  <div className="text-xs text-slate-400">Classe Primária Identificada</div>
+                  <div className="text-base font-bold text-white">{primaryClass.name[language]}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">{primaryClass.description[language]}</div>
                 </div>
               </div>
 
               <div className="text-right shrink-0">
-                <span className="text-xs text-slate-400">{t.studio.confidenceScore}</span>
-                <div className="text-2xl font-black text-emerald-400 font-mono">
-                  {adapterEnabled ? '99.4%' : '62.1%'}
+                <div className="text-2xl font-black font-mono text-emerald-400">
+                  {(classProbabilities[0].probability * 100).toFixed(1)}%
                 </div>
-                {!adapterEnabled && (
-                  <span className="text-[10px] text-amber-400 flex items-center gap-1 justify-end">
-                    <AlertTriangle className="w-3 h-3" />
-                    Adapter Desativado
-                  </span>
-                )}
+                <span className="text-[10px] font-mono text-slate-400">Confiança do Modelo</span>
               </div>
             </div>
 
-            {/* Probability Bars for 10 Classes */}
-            <div className="space-y-2 pt-2">
-              <div className="text-xs font-semibold text-slate-400 flex items-center justify-between">
-                <span>{t.studio.classDistribution}</span>
-                <span>Softmax Distribution</span>
-              </div>
-              <div className="space-y-2">
-                {classProbabilities.slice(0, 5).map(item => {
-                  const pct = (item.probability * 100).toFixed(1);
-                  return (
-                    <div key={item.class.id} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-300 font-medium flex items-center gap-1.5">
-                          <span 
-                            className="w-2 h-2 rounded-full" 
-                            style={{ backgroundColor: item.class.color }}
-                          ></span>
-                          {item.class.name[language]}
-                        </span>
-                        <span className="font-mono text-slate-400">{pct}%</span>
-                      </div>
-                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${pct}%`,
-                            backgroundColor: item.class.color
-                          }}
-                        ></div>
-                      </div>
+            {/* Probabilities Distribution List */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-slate-400">Distribuição de Probabilidades por Classe</div>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {classProbabilities.map((item) => (
+                  <div key={item.class.id} className="p-2 bg-slate-950/70 rounded-lg border border-slate-800/80 text-xs flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.class.color }} />
+                      <span className="text-slate-300 font-medium">{item.class.name[language]}</span>
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-3">
+                      <div className="w-24 bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${item.probability * 100}%`, backgroundColor: item.class.color }}
+                        />
+                      </div>
+                      <span className="font-mono text-[11px] text-slate-300 w-12 text-right">
+                        {(item.probability * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Modal: Adicionar Região Pré-configurada */}
+      {isAddPresetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-400" />
+                <span>Adicionar Região Pré-configurada</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddPresetModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddPreset} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Nome da Região / Município</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Primavera do Leste (MT)"
+                  value={newPresetForm.name}
+                  onChange={(e) => setNewPresetForm({ ...newPresetForm, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Fazenda / Talhão</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Fazenda Alvorada"
+                    value={newPresetForm.farm}
+                    onChange={(e) => setNewPresetForm({ ...newPresetForm, farm: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Estado (UF)</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={2}
+                    placeholder="MT"
+                    value={newPresetForm.state}
+                    onChange={(e) => setNewPresetForm({ ...newPresetForm, state: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500 uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Bioma</label>
+                  <select
+                    value={newPresetForm.biome}
+                    onChange={(e) => setNewPresetForm({ ...newPresetForm, biome: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="Cerrado">Cerrado</option>
+                    <option value="Amazônia">Amazônia</option>
+                    <option value="Mata Atlântica">Mata Atlântica</option>
+                    <option value="Caatinga">Caatinga</option>
+                    <option value="Pampa">Pampa</option>
+                    <option value="Pantanal">Pantanal</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Área Aproximada (ha)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    step="10"
+                    value={newPresetForm.hectares}
+                    onChange={(e) => setNewPresetForm({ ...newPresetForm, hectares: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Latitude Centro (WGS84)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={newPresetForm.lat}
+                    onChange={(e) => setNewPresetForm({ ...newPresetForm, lat: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Longitude Centro (WGS84)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={newPresetForm.lng}
+                    onChange={(e) => setNewPresetForm({ ...newPresetForm, lng: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Descrição / Finalidade</label>
+                <textarea
+                  rows={2}
+                  placeholder="Monitoramento de safra e conformidade ambiental..."
+                  value={newPresetForm.description}
+                  onChange={(e) => setNewPresetForm({ ...newPresetForm, description: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPresetModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl text-slate-950 bg-emerald-400 hover:bg-emerald-300 font-bold transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+                >
+                  Salvar Região
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

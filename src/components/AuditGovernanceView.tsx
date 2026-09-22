@@ -656,7 +656,7 @@ resource "google_storage_bucket" "geo_lake" {
 # 2. Vertex AI Private Endpoint com GPU A100 / T4
 resource "google_vertex_ai_endpoint" "geoai_endpoint" {
   name         = "triminds-geoai-endpoint-prod"
-  display_name = "Triminds GeoAI 64-Bands LULC Classifier"
+  display_name = "Triminds GeoAI 64-Bands Land Cover Classifier"
   location     = "us-central1"
   network      = google_compute_network.geo_vpc.id
 }

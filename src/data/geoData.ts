@@ -605,7 +605,7 @@ export const DEEP_LEARNING_MODELS: DeepLearningModel[] = [
       SeaLake: 0.998
     },
     description: {
-      'pt-BR': 'Modelo de ponta proprietário Triminds combinando extração local convolucional e atenção global para LULC complexo.',
+      'pt-BR': 'Modelo de ponta proprietário Triminds combinando extração local convolucional e atenção global para mapeamento complexo de uso do solo.',
       en: 'State-of-the-art hybrid architecture fusing local convolutional spatial features with global attention.',
       es: 'Arquitectura híbrida de vanguardia que fusiona convolución local con atención global.'
     }

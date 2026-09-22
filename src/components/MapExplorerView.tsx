@@ -194,7 +194,7 @@ export const MapExplorerView: React.FC<MapExplorerViewProps> = ({ onOpenMapSelec
                       : 'bg-slate-950 text-slate-500 border-slate-800'
                   }`}
                 >
-                  LULC Mask Overlay
+                  Máscara de Cobertura do Solo
                 </button>
               </div>
             </div>
@@ -229,7 +229,7 @@ export const MapExplorerView: React.FC<MapExplorerViewProps> = ({ onOpenMapSelec
                     {/* Area tag center */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                       <span className="bg-slate-950/90 text-white border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold shadow-lg">
-                        Talhão Agrícola / LULC: 5.420 ha
+                        Talhão Agrícola / Cobertura: 5.420 ha
                       </span>
                     </div>
                   </div>

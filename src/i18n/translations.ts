@@ -46,7 +46,7 @@ export const translations = {
       biome: 'Bioma',
     },
     studio: {
-      title: 'GeoAI Inference & LULC Studio',
+      title: 'GeoAI Inference & Studio de Cobertura do Solo',
       subtitle: 'Classificação de Uso e Cobertura do Solo em tempo real com Tensores Google Satellite Embedding (64 canais), Sentinel-2 e Landsat.',
       inputSourceTitle: '1. Selecionar Fonte de Entrada',
       selectBiomeSample: 'Amostras de Biomas Brasileiros & Globais',
@@ -70,7 +70,7 @@ export const translations = {
       inferenceResultsTitle: '4. Resultados da Classificação GeoAI',
       primaryClassDetected: 'Classe Predominante Detectada',
       confidenceScore: 'Índice de Confiança',
-      classDistribution: 'Distribuição de Probabilidades por Classe LULC',
+      classDistribution: 'Distribuição de Probabilidades por Classe de Cobertura do Solo',
       tensorMetadata: 'Metadados do Tensor Processado',
       resolution: 'Resolução Espacial',
       dimensions: 'Dimensões do Tensor',
@@ -79,7 +79,7 @@ export const translations = {
     },
     explorer: {
       title: 'Mapeamento Geoespacial & Cálculo de Hectares',
-      subtitle: 'Inspeção cartográfica de talhões, cálculo automático de área por classe LULC e conformidade ambiental.',
+      subtitle: 'Inspeção cartográfica de talhões, cálculo automático de área por classe de cobertura do solo e conformidade ambiental.',
       selectPolygon: 'Selecionar Área de Estudo / Bounding Box',
       drawTool: 'Ferramenta de Seleção de Polígono',
       totalArea: 'Área Total Analisada',
@@ -90,12 +90,12 @@ export const translations = {
       exportMap: 'Exportar Mapa Vetorial (.geojson / .shp)',
     },
     timeseries: {
-      title: 'Detecção de Mudança Temporal de Uso do Solo (2020 - 2024)',
+      title: 'Detecção de Mudança Temporal de Uso do Solo (2020 - 2025)',
       subtitle: 'Monitoramento histórico de transições de uso da terra: expansão agrícola, dinâmica florestal e pastagens.',
       selectYear: 'Selecione o Ano do Mosaico',
       historicalTrend: 'Evolução Temporal da Cobertura do Solo (% da Área)',
       ndviEvolution: 'Variação Histórica do NDVI Médio',
-      transitionMatrixTitle: 'Matriz de Transição de Uso da Terra (2020 vs 2024)',
+      transitionMatrixTitle: 'Matriz de Transição de Uso da Terra (2020 vs 2025)',
       deforestationAlert: 'Monitoramento Prodes / Alertas: Desmatamento Zero Detectado no Período',
     },
     models: {
@@ -103,7 +103,7 @@ export const translations = {
       subtitle: 'Catálogo de modelos Deep Learning avaliados no benchmark EuroSAT e Google Satellite Embeddings 64-bandas.',
       modelCardTitle: 'Arquiteturas Disponíveis para Inferência',
       f1Benchmark: 'Comparativo de F1-Score e Latência',
-      confusionMatrix: 'Matriz de Confusão (10 Classes LULC)',
+      confusionMatrix: 'Matriz de Confusão (10 Classes de Uso do Solo)',
       topPerforming: 'Melhor Performance Global',
     },
     drift: {
@@ -134,7 +134,7 @@ export const translations = {
   en: {
     appName: 'Triminds Geo AI',
     appBadge: 'v2.4.0 • Enterprise Earth Observation',
-    appSubtitle: 'Geospatial Land Use Land Cover (LULC) Classification & Deep Learning Inference Platform',
+    appSubtitle: 'Geospatial Land Use and Land Cover Classification & Deep Learning Inference Platform',
     nav: {
       studio: 'GeoAI Studio',
       areaAnalysis: 'Pick on Map & Analyze',
@@ -176,7 +176,7 @@ export const translations = {
       biome: 'Biome',
     },
     studio: {
-      title: 'GeoAI Inference & LULC Studio',
+      title: 'GeoAI Inference & Land Cover Studio',
       subtitle: 'Real-time Land Use & Land Cover classification using Google Satellite Embedding 64-channel tensors, Sentinel-2, and Landsat.',
       inputSourceTitle: '1. Select Satellite Input Source',
       selectBiomeSample: 'Brazilian & Global Biome Benchmark Samples',
@@ -198,9 +198,9 @@ export const translations = {
       tabNdre: 'NDRE Map (RedEdge)',
       tabEmbedding: '64D Embedding Vector Profile',
       inferenceResultsTitle: '4. GeoAI Classification Results',
-      primaryClassDetected: 'Predominant LULC Class Detected',
+      primaryClassDetected: 'Predominant Land Cover Class Detected',
       confidenceScore: 'Confidence Level',
-      classDistribution: 'LULC Class Probability Distribution',
+      classDistribution: 'Land Cover Class Probability Distribution',
       tensorMetadata: 'Processed Tensor Metadata',
       resolution: 'Spatial Resolution',
       dimensions: 'Tensor Shape',
@@ -209,7 +209,7 @@ export const translations = {
     },
     explorer: {
       title: 'Geospatial Mapping & Hectare Calculation',
-      subtitle: 'Cartographic parcel inspection, automatic acreage per LULC class, and environmental compliance metrics.',
+      subtitle: 'Cartographic parcel inspection, automatic acreage per land cover class, and environmental compliance metrics.',
       selectPolygon: 'Select Study Area / Bounding Box',
       drawTool: 'Polygon Selection Tool',
       totalArea: 'Total Analyzed Area',
@@ -220,12 +220,12 @@ export const translations = {
       exportMap: 'Export Vector Map (.geojson / .shp)',
     },
     timeseries: {
-      title: 'Land Use Change Detection (2020 - 2024)',
+      title: 'Land Use Change Detection (2020 - 2025)',
       subtitle: 'Historical multi-temporal monitoring of agricultural expansion, forest dynamics, and pasture transitions.',
       selectYear: 'Select Mosaic Year',
       historicalTrend: 'Historical Land Cover Evolution (% of Area)',
       ndviEvolution: 'Historical Mean NDVI Trend',
-      transitionMatrixTitle: 'Land Use Transition Matrix (2020 vs 2024)',
+      transitionMatrixTitle: 'Land Use Transition Matrix (2020 vs 2025)',
       deforestationAlert: 'Satellite Deforestation Monitoring: Zero Deforestation Detected in Period',
     },
     models: {
@@ -233,7 +233,7 @@ export const translations = {
       subtitle: 'Catalog of Deep Learning architectures benchmarked on EuroSAT and 64-band Google Satellite Embeddings.',
       modelCardTitle: 'Available Inference Architectures',
       f1Benchmark: 'F1-Score vs Inference Latency Benchmark',
-      confusionMatrix: 'Confusion Matrix (10 LULC Classes)',
+      confusionMatrix: 'Confusion Matrix (10 Land Cover Classes)',
       topPerforming: 'Top Overall Performing Architecture',
     },
     drift: {
@@ -306,7 +306,7 @@ export const translations = {
       biome: 'Bioma',
     },
     studio: {
-      title: 'GeoAI Inference & LULC Studio',
+      title: 'GeoAI Inference & Studio de Cobertura del Suelo',
       subtitle: 'Clasificación de Uso y Cobertura del Suelo en tiempo real con tensores Google Satellite Embedding (64 canales), Sentinel-2 y Landsat.',
       inputSourceTitle: '1. Seleccionar Fuente de Entrada',
       selectBiomeSample: 'Muestras de Biomas Brasileños y Globales',
@@ -330,7 +330,7 @@ export const translations = {
       inferenceResultsTitle: '4. Resultados de la Clasificación GeoAI',
       primaryClassDetected: 'Clase Predominante Detectada',
       confidenceScore: 'Nivel de Confianza',
-      classDistribution: 'Distribución de Probabilidades por Clase LULC',
+      classDistribution: 'Distribución de Probabilidades por Clase de Cobertura del Suelo',
       tensorMetadata: 'Metadados del Tensor Procesado',
       resolution: 'Resolución Espacial',
       dimensions: 'Dimensiones del Tensor',
@@ -339,7 +339,7 @@ export const translations = {
     },
     explorer: {
       title: 'Mapeo Geoespacial y Cálculo de Hectáreas',
-      subtitle: 'Inspección cartográfica de parcelas, cálculo automático de superficie por clase LULC y métricas ambientales.',
+      subtitle: 'Inspección cartográfica de parcelas, cálculo automático de superficie por clase de cobertura del suelo y métricas ambientales.',
       selectPolygon: 'Seleccionar Área de Estudio / Bounding Box',
       drawTool: 'Herramienta de Selección de Polígonos',
       totalArea: 'Superficie Total Analizada',
@@ -350,12 +350,12 @@ export const translations = {
       exportMap: 'Exportar Mapa Vectorial (.geojson / .shp)',
     },
     timeseries: {
-      title: 'Detección de Cambios en el Uso del Suelo (2020 - 2024)',
+      title: 'Detección de Cambios en el Uso del Suelo (2020 - 2025)',
       subtitle: 'Monitoreo histórico de transiciones de uso de la tierra: expansión agrícola, dinámica forestal y pastizales.',
       selectYear: 'Seleccione el Año del Mosaico',
       historicalTrend: 'Evolución Histórica de la Cobertura del Suelo (% de Superficie)',
       ndviEvolution: 'Tendencia Histórica del NDVI Promedio',
-      transitionMatrixTitle: 'Matriz de Transición de Uso del Suelo (2020 vs 2024)',
+      transitionMatrixTitle: 'Matriz de Transición de Uso del Suelo (2020 vs 2025)',
       deforestationAlert: 'Monitoreo Satelital de Deforestación: Cero Deforestación Detectada en el Período',
     },
     models: {
@@ -363,7 +363,7 @@ export const translations = {
       subtitle: 'Catálogo de arquitecturas Deep Learning evaluadas en EuroSAT y tensores de 64 bandas de Google Satellite Embeddings.',
       modelCardTitle: 'Arquitecturas Disponibles para Inferencia',
       f1Benchmark: 'Comparativa de F1-Score y Latencia de Inferencia',
-      confusionMatrix: 'Matriz de Confusión (10 Clases LULC)',
+      confusionMatrix: 'Matriz de Confusión (10 Clases de Cobertura del Suelo)',
       topPerforming: 'Arquitectura con Mejor Rendimiento Global',
     },
     drift: {

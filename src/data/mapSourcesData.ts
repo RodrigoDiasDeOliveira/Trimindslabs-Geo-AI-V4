@@ -37,7 +37,7 @@ export const MAP_SOURCES: MapSourceDefinition[] = [
     provider: 'Google Research / Satellite Foundation Models',
     resolution: '10m / pixel',
     bandCount: 64,
-    description: 'Embeddings auto-supervisionados de 64 dimensões latentes para classificação de alta precisão de biomassa e LULC.',
+    description: 'Embeddings auto-supervisionados de 64 dimensões latentes para classificação de alta precisão de biomassa e cobertura do solo.',
     cloudCoverageThresholdPct: 2,
     badgeColor: 'purple',
     availableFormats: [

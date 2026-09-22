@@ -69,7 +69,7 @@ Coordenadas Centrais: Lat ${selectedSample.coordinates.lat}, Long ${selectedSamp
 Bounding Box (WGS84): [${selectedSample.coordinates.bbox.join(', ')}]
 Sensor Satélite: ${selectedSample.sensor} (64 Bandas Espectrais)
 
-2. MÉTRICAS DE COBERTURA DO SOLO (LULC)
+2. MÉTRICAS DE COBERTURA DO SOLO
 - Lavoura Anual: 3.250 ha (60.0%)
 - Floresta Nativa: 1.192 ha (22.0%)
 - Pastagem: 542 ha (10.0%)
@@ -80,7 +80,7 @@ Sensor Satélite: ${selectedSample.sensor} (64 Bandas Espectrais)
 - Reserva Legal Exigida: 20% a 80% (conforme bioma)
 - Reserva Legal Apurada: CONFORME
 - Área de Preservação Permanente (APP): PRESERVADA
-- Desmatamento Recente (2020-2024): 0.00% DETECTADO (Desmatamento Zero)
+- Desmatamento Recente (2020-2025): 0.00% DETECTADO (Desmatamento Zero)
 
 4. VALIDAÇÃO DE MODELO E LINHAGEM
 - Modelo Empregado: Hybrid CNN-Transformer (64 Channels)

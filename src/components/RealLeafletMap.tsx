@@ -1,6 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Layers, Maximize2, MapPin, Eye, Sliders, RefreshCw, Square, Pentagon, Trash2 } from 'lucide-react';
+import { 
+  Layers, 
+  Maximize2, 
+  MapPin, 
+  Eye, 
+  Sliders, 
+  RefreshCw, 
+  Square, 
+  Pentagon, 
+  Trash2,
+  Check,
+  RotateCcw,
+  Plus,
+  Minus,
+  Move
+} from 'lucide-react';
 import { GeoJSONFeatureCollection } from '../../server/types';
 
 export interface MapCoords {
@@ -94,6 +109,7 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const roiLayerRef = useRef<L.LayerGroup | null>(null);
+  const drawingLayerRef = useRef<L.LayerGroup | null>(null);
   const lulcLayerRef = useRef<L.GeoJSON | null>(null);
 
   const [selectedBasemap, setSelectedBasemap] = useState<'satellite' | 'osm' | 'topo'>('satellite');
@@ -101,6 +117,8 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
   const [currentZoom, setCurrentZoom] = useState<number>(zoom);
   const [drawingPoints, setDrawingPoints] = useState<L.LatLng[]>([]);
   const [localOpacity, setLocalOpacity] = useState<number>(overlayOpacity);
+  const [formatStepKm, setFormatStepKm] = useState<number>(0.5);
+  const [showBboxFormatBar, setShowBboxFormatBar] = useState<boolean>(true);
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -265,6 +283,147 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
     }
   }, [lulcGeoJson, localOpacity]);
 
+  // Helper: finalize polygon with >= 3 vertices
+  const finalizePolygon = (pointsToFinalize?: L.LatLng[]) => {
+    const points = pointsToFinalize || drawingPoints;
+    if (points.length < 3) return;
+    const first = points[0];
+    const coords = points.map(p => [Number(p.lng.toFixed(5)), Number(p.lat.toFixed(5))]);
+    coords.push([Number(first.lng.toFixed(5)), Number(first.lat.toFixed(5))]);
+
+    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    points.forEach(p => {
+      if (p.lng < minLng) minLng = p.lng;
+      if (p.lng > maxLng) maxLng = p.lng;
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+    });
+
+    const newBbox: [number, number, number, number] = [
+      Number(minLng.toFixed(5)),
+      Number(minLat.toFixed(5)),
+      Number(maxLng.toFixed(5)),
+      Number(maxLat.toFixed(5))
+    ];
+    const areaHa = Number((getSphericalAreaMeters(points) / 10000).toFixed(2));
+
+    onRoiChange?.(newBbox, coords, areaHa);
+    setDrawingPoints([]);
+    if (drawingLayerRef.current) {
+      drawingLayerRef.current.clearLayers();
+    }
+    onDrawingModeChange?.(null);
+  };
+
+  // Helper: Undo last vertex in polygon mode
+  const handleUndoVertex = () => {
+    setDrawingPoints(prev => prev.slice(0, -1));
+  };
+
+  // Helper: Adjust any of the 4 sides of the rectangle (North, South, East, West)
+  const adjustBboxSide = (side: 'north' | 'south' | 'east' | 'west', direction: 'expand' | 'shrink') => {
+    if (!bbox) return;
+    const [minLng, minLat, maxLng, maxLat] = bbox;
+    const stepKm = formatStepKm;
+    const degLatPerKm = stepKm / 111;
+    const avgLat = (minLat + maxLat) / 2;
+    const degLngPerKm = stepKm / (111 * Math.cos((avgLat * Math.PI) / 180));
+
+    let newMinLng = minLng;
+    let newMaxLng = maxLng;
+    let newMinLat = minLat;
+    let newMaxLat = maxLat;
+
+    if (side === 'north') {
+      newMaxLat = direction === 'expand' ? maxLat + degLatPerKm : maxLat - degLatPerKm;
+      if (newMaxLat <= newMinLat + 0.005) return;
+    } else if (side === 'south') {
+      newMinLat = direction === 'expand' ? minLat - degLatPerKm : minLat + degLatPerKm;
+      if (newMinLat >= newMaxLat - 0.005) return;
+    } else if (side === 'east') {
+      newMaxLng = direction === 'expand' ? maxLng + degLngPerKm : maxLng - degLngPerKm;
+      if (newMaxLng <= newMinLng + 0.005) return;
+    } else if (side === 'west') {
+      newMinLng = direction === 'expand' ? minLng - degLngPerKm : minLng + degLngPerKm;
+      if (newMinLng >= newMaxLng - 0.005) return;
+    }
+
+    const updatedBbox: [number, number, number, number] = [
+      Number(newMinLng.toFixed(5)),
+      Number(newMinLat.toFixed(5)),
+      Number(newMaxLng.toFixed(5)),
+      Number(newMaxLat.toFixed(5))
+    ];
+    const polyCoords = [
+      [updatedBbox[0], updatedBbox[1]],
+      [updatedBbox[2], updatedBbox[1]],
+      [updatedBbox[2], updatedBbox[3]],
+      [updatedBbox[0], updatedBbox[3]],
+      [updatedBbox[0], updatedBbox[1]]
+    ];
+    const corners = [
+      L.latLng(updatedBbox[1], updatedBbox[0]),
+      L.latLng(updatedBbox[1], updatedBbox[2]),
+      L.latLng(updatedBbox[3], updatedBbox[2]),
+      L.latLng(updatedBbox[3], updatedBbox[0])
+    ];
+    const areaHa = Number((getSphericalAreaMeters(corners) / 10000).toFixed(2));
+    onRoiChange?.(updatedBbox, polyCoords, areaHa);
+  };
+
+  // Render in-progress drawing preview (vertices + lines)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (!drawingLayerRef.current) {
+      drawingLayerRef.current = L.layerGroup().addTo(map);
+    }
+    const layer = drawingLayerRef.current;
+    layer.clearLayers();
+
+    if (drawingPoints.length === 0) return;
+
+    // Draw lines between points
+    if (drawingPoints.length > 1) {
+      const line = L.polyline(drawingPoints, {
+        color: '#f59e0b',
+        weight: 3,
+        dashArray: '6, 6',
+        opacity: 0.9
+      });
+      layer.addLayer(line);
+    }
+
+    // Draw vertex markers
+    drawingPoints.forEach((pt, idx) => {
+      const isFirst = idx === 0;
+      const marker = L.circleMarker(pt, {
+        radius: isFirst ? 9 : 6,
+        fillColor: isFirst ? '#10b981' : '#f59e0b',
+        fillOpacity: 1,
+        color: '#0f172a',
+        weight: 2
+      });
+
+      marker.bindTooltip(
+        isFirst 
+          ? `Vértice 1 (Ponto Inicial - clique para fechar)` 
+          : `Vértice ${idx + 1}`,
+        { permanent: false, direction: 'top' }
+      );
+
+      if (isFirst && drawingPoints.length >= 3) {
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          finalizePolygon();
+        });
+      }
+
+      layer.addLayer(marker);
+    });
+  }, [drawingPoints]);
+
   // Interactive Drawing Mode Handling
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -272,6 +431,9 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
 
     if (!isDrawingMode) {
       map.getContainer().style.cursor = '';
+      if (drawingLayerRef.current) {
+        drawingLayerRef.current.clearLayers();
+      }
       return;
     }
 
@@ -311,49 +473,38 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
 
           onRoiChange?.(newBbox, polyCoords, areaHa);
           setDrawingPoints([]);
+          if (drawingLayerRef.current) {
+            drawingLayerRef.current.clearLayers();
+          }
           onDrawingModeChange?.(null);
         }
       } else if (isDrawingMode === 'polygon') {
-        const nextPoints = [...drawingPoints, clicked];
-        setDrawingPoints(nextPoints);
-
-        // Check if closed by clicking near first point
-        if (nextPoints.length >= 3) {
-          const first = nextPoints[0];
+        // Check if clicking near first point to close
+        if (drawingPoints.length >= 3) {
+          const first = drawingPoints[0];
           const dist = map.distance(clicked, first);
-          if (dist < 50 && nextPoints.length >= 4) {
-            // Close polygon
-            const coords = nextPoints.map(p => [Number(p.lng.toFixed(5)), Number(p.lat.toFixed(5))]);
-            coords.push([Number(first.lng.toFixed(5)), Number(first.lat.toFixed(5))]);
-
-            let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
-            nextPoints.forEach(p => {
-              if (p.lng < minLng) minLng = p.lng;
-              if (p.lng > maxLng) maxLng = p.lng;
-              if (p.lat < minLat) minLat = p.lat;
-              if (p.lat > maxLat) maxLat = p.lat;
-            });
-
-            const newBbox: [number, number, number, number] = [
-              Number(minLng.toFixed(5)),
-              Number(minLat.toFixed(5)),
-              Number(maxLng.toFixed(5)),
-              Number(maxLat.toFixed(5))
-            ];
-            const areaHa = Number((getSphericalAreaMeters(nextPoints) / 10000).toFixed(2));
-
-            onRoiChange?.(newBbox, coords, areaHa);
-            setDrawingPoints([]);
-            onDrawingModeChange?.(null);
+          if (dist < 45) {
+            finalizePolygon();
+            return;
           }
         }
+        setDrawingPoints(prev => [...prev, clicked]);
+      }
+    };
+
+    const handleMapDblClick = (e: L.LeafletMouseEvent) => {
+      L.DomEvent.stopPropagation(e);
+      if (isDrawingMode === 'polygon' && drawingPoints.length >= 3) {
+        finalizePolygon();
       }
     };
 
     map.on('click', handleMapClick);
+    map.on('dblclick', handleMapDblClick);
 
     return () => {
       map.off('click', handleMapClick);
+      map.off('dblclick', handleMapDblClick);
     };
   }, [isDrawingMode, drawingPoints, onRoiChange, onDrawingModeChange]);
 
@@ -481,11 +632,11 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
           </button>
         </div>
 
-        {/* LULC Opacity Slider (if classification active) */}
+        {/* Cobertura do Solo Opacity Slider (if classification active) */}
         {lulcGeoJson && (
           <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-lg text-xs text-slate-300">
             <Sliders className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Opacidade LULC:</span>
+            <span>Opacidade da Cobertura:</span>
             <input
               type="range"
               min="0.1"
@@ -500,26 +651,217 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
         )}
       </div>
 
-      {/* Drawing Mode Helper Banner */}
-      {isDrawingMode && (
-        <div className="absolute top-16 left-3 right-3 sm:right-auto z-[1000] bg-amber-500/90 backdrop-blur-md text-slate-950 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xl flex items-center justify-between gap-3 animate-pulse">
+      {/* Polygon Drawing Active Controls Banner */}
+      {isDrawingMode === 'polygon' && (
+        <div className="absolute top-16 left-3 right-3 sm:right-auto z-[1000] bg-slate-900/95 border border-amber-500/50 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl text-xs shadow-2xl flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+            <span className="font-bold text-amber-400">Desenho de Polígono</span>
+            <span className="bg-slate-800 px-2 py-0.5 rounded-full font-mono text-[11px] text-slate-200">
+              {drawingPoints.length} {drawingPoints.length === 1 ? 'vértice' : 'vértices'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              type="button"
+              onClick={handleUndoVertex}
+              disabled={drawingPoints.length === 0}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
+              title="Desfazer último vértice marcado"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Desfazer</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => finalizePolygon()}
+              disabled={drawingPoints.length < 3}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
+                drawingPoints.length >= 3
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 ring-2 ring-emerald-400/50'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              }`}
+              title={drawingPoints.length >= 3 ? "Finalizar e fechar polígono" : "Mínimo 3 vértices necessários"}
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Finalizar Polígono</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDrawingPoints([]);
+                if (drawingLayerRef.current) drawingLayerRef.current.clearLayers();
+                onDrawingModeChange?.(null);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Box Drawing Active Helper Banner */}
+      {isDrawingMode === 'box' && (
+        <div className="absolute top-16 left-3 right-3 sm:right-auto z-[1000] bg-amber-500/95 backdrop-blur-md text-slate-950 px-4 py-2.5 rounded-2xl text-xs font-semibold shadow-2xl flex items-center justify-between gap-3 animate-pulse">
           <div>
-            {isDrawingMode === 'box'
-              ? drawingPoints.length === 0
-                ? 'Clique no primeiro canto do retângulo no mapa...'
-                : 'Clique no canto oposto para fechar o retângulo de ROI.'
-              : `Clique nos vértices do talhão (${drawingPoints.length} marcados). Clique no ponto inicial para fechar.`}
+            {drawingPoints.length === 0
+              ? '1. Clique no primeiro canto da área retangular no mapa...'
+              : '2. Clique no canto diagonal oposto para fechar o retângulo.'}
           </div>
           <button
             type="button"
             onClick={() => {
               setDrawingPoints([]);
+              if (drawingLayerRef.current) drawingLayerRef.current.clearLayers();
               onDrawingModeChange?.(null);
             }}
-            className="px-2 py-0.5 rounded bg-slate-950 text-white text-[10px] font-bold"
+            className="px-2.5 py-1 rounded-lg bg-slate-950 text-white text-[10px] font-bold cursor-pointer"
           >
             Cancelar
           </button>
+        </div>
+      )}
+
+      {/* Rectangle 4-Side Formatting Tool (when a Bounding Box is defined) */}
+      {bbox && !isDrawingMode && (
+        <div className="absolute top-16 right-3 z-[1000] bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-3 shadow-2xl text-xs text-white max-w-xs transition-all">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div className="flex items-center gap-1.5 font-bold text-sky-400">
+              <Move className="w-3.5 h-3.5" />
+              <span>Editar 4 Lados do Retângulo</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBboxFormatBar(!showBboxFormatBar)}
+              className="text-[10px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-800"
+            >
+              {showBboxFormatBar ? 'Minimizar' : 'Expandir'}
+            </button>
+          </div>
+
+          {showBboxFormatBar && (
+            <div className="space-y-2">
+              {/* Step size selector */}
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pb-1">
+                <span>Passo de ajuste:</span>
+                <div className="flex gap-1">
+                  {[0.2, 0.5, 1.0, 2.0].map((step) => (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => setFormatStepKm(step)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                        formatStepKm === step
+                          ? 'bg-sky-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      {step >= 1 ? `${step}km` : `${step * 1000}m`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4 sides directional buttons */}
+              <div className="grid grid-cols-2 gap-1.5">
+                {/* Norte */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-1.5 flex items-center justify-between">
+                  <span className="font-semibold text-slate-300 text-[11px]">Norte</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('north', 'shrink')}
+                      title="Diminuir lado Norte"
+                      className="p-1 rounded bg-slate-800 hover:bg-rose-900/40 text-rose-300 transition-colors"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('north', 'expand')}
+                      title="Expandir lado Norte"
+                      className="p-1 rounded bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sul */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-1.5 flex items-center justify-between">
+                  <span className="font-semibold text-slate-300 text-[11px]">Sul</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('south', 'shrink')}
+                      title="Diminuir lado Sul"
+                      className="p-1 rounded bg-slate-800 hover:bg-rose-900/40 text-rose-300 transition-colors"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('south', 'expand')}
+                      title="Expandir lado Sul"
+                      className="p-1 rounded bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Leste */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-1.5 flex items-center justify-between">
+                  <span className="font-semibold text-slate-300 text-[11px]">Leste</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('east', 'shrink')}
+                      title="Diminuir lado Leste"
+                      className="p-1 rounded bg-slate-800 hover:bg-rose-900/40 text-rose-300 transition-colors"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('east', 'expand')}
+                      title="Expandir lado Leste"
+                      className="p-1 rounded bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Oeste */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-1.5 flex items-center justify-between">
+                  <span className="font-semibold text-slate-300 text-[11px]">Oeste</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('west', 'shrink')}
+                      title="Diminuir lado Oeste"
+                      className="p-1 rounded bg-slate-800 hover:bg-rose-900/40 text-rose-300 transition-colors"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustBboxSide('west', 'expand')}
+                      title="Expandir lado Oeste"
+                      className="p-1 rounded bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
