@@ -24,7 +24,7 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950 font-sans">
+    <div className="min-h-screen bg-[#F5F1E8] text-[#1F1F1D] flex flex-col selection:bg-[#EEE9DF] selection:text-[#1F1F1D] font-sans">
       <Header activeTab={activeTab} onTabChange={setActiveTab} />
 
       <main className="flex-1 pb-16">
@@ -44,14 +44,14 @@ const AppContent: React.FC = () => {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <div className="flex items-center space-x-2">
             <Satellite className="w-4 h-4 text-emerald-400" />
-            <span className="font-semibold text-slate-200">Triminds Geo AI Enterprise</span>
+            <span className="font-semibold text-slate-200">Trimindslabs Geo-AI V4</span>
             <span>•</span>
             <span>Google Satellite Embedding V1 (64 Bands) & Sentinel-2 L2A</span>
           </div>
 
           <div className="flex items-center space-x-6">
             <a
-              href="https://github.com/RodrigoDiasDeOliveira/Triminds-Geo-AI"
+              href="https://github.com/RodrigoDiasDeOliveira/Trimindslabs-Geo-AI-V4"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center space-x-1.5 text-slate-300 hover:text-emerald-400 transition-colors font-medium"
