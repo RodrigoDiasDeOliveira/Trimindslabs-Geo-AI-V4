@@ -4,7 +4,9 @@
   <img width="100%" style="border-radius: 12px; margin: 16px 0;" alt="Triminds Geo AI Satellite Earth Observation" src="https://github.com/user-attachments/assets/291af6bb-21c5-437b-ab41-734048ddb39f" />
 </p>
 
-Plataforma de inteligência geoespacial operacional conectada a dados reais de satélite Copernicus Sentinel-2 L2A, projetada para monitoramento de Uso e Cobertura da Terra (**LULC - Land Use and Land Cover**), cálculo determinístico de índices de vegetação (NDVI, NDRE, EVI), conformidade com o Cadastro Ambiental Rural (**CAR**), auditoria de carbono (IPCC Tier 1 / MCTI) e pareceres agronômicos com Google Gemini.
+Plataforma de inteligência geoespacial com descoberta de cenas Sentinel-2 via catálogo STAC, extração de bandas COG, cálculo determinístico de índices espectrais, classificação LULC baseada em regras, estimativa de carbono e geração opcional de pareceres via Gemini. Os resultados de classificação e carbono são estimativas computacionais e não substituem validação de campo ou certificação regulatória.
+
+![Geo-AI V4 architecture](./docs/diagrams/geo-ai-v4-architecture.svg)
 
 > **Princípio Fundamental:** Dados reais na entrada → Processamento determinístico rastreável → Evidências e proveniência na saída.
 
