@@ -94,7 +94,7 @@ Todos os endpoints operam sob o prefixo `/api` e `/api/v1`:
 - **`GET /api/v1/health`**
   - Retorna o status de integridade do runtime Node.js, versão da API, métricas de memória e capacidades do motor espectral (Float32Array / CPU SIMD).
 - **`GET /api/v1/providers/status`**
-  - Verifica a conectividade do catálogo STAC e do endpoint Google Earth Engine. A conectividade do Earth Engine não significa que a busca de cenas via Earth Engine esteja implementada; atualmente esse adaptador retorna uma lista vazia quando conectado. A descoberta de cenas implementada usa o catálogo STAC público.
+  - Verifica a disponibilidade do catálogo STAC e consulta o endpoint público de descoberta do Google Earth Engine. O probe atual não envia uma chamada autenticada ao projeto Earth Engine; portanto, `CONNECTED` não comprova autenticação ou permissão de acesso a coleções. A busca de cenas via Earth Engine não está implementada e o adaptador retorna uma lista vazia quando conectado. A descoberta de cenas implementada usa o catálogo STAC público.
 
 ### 2. Descoberta & Pipeline Geoespacial Real
 - **`POST /api/v1/satellite/search`**
