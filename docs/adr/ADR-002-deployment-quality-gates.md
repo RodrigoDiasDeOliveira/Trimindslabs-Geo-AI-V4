@@ -5,7 +5,7 @@
 
 ## Context
 
-The current deployment workflow builds the application, but does not run the package test and lint scripts as release gates. Its post-deploy health request is informational rather than blocking, and the project ID is not explicitly pinned in the workflow.
+The current deployment workflow builds the application, but does not run the package test and lint scripts as release gates. Its post-deploy health request is informational rather than blocking, and the project ID is not explicitly pinned in the workflow. The application source hardcodes port 3000 while the Dockerfile sets `PORT=8080`; the app does not read that environment variable in this version, so the container port configuration is inconsistent.
 
 ## Decision proposed
 
