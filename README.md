@@ -4,7 +4,9 @@
   <img width="100%" style="border-radius: 12px; margin: 16px 0;" alt="Triminds Geo AI Satellite Earth Observation" src="https://github.com/user-attachments/assets/291af6bb-21c5-437b-ab41-734048ddb39f" />
 </p>
 
-Plataforma de inteligência geoespacial operacional conectada a dados reais de satélite Copernicus Sentinel-2 L2A, projetada para monitoramento de Uso e Cobertura da Terra (**LULC - Land Use and Land Cover**), cálculo determinístico de índices de vegetação (NDVI, NDRE, EVI), conformidade com o Cadastro Ambiental Rural (**CAR**), auditoria de carbono (IPCC Tier 1 / MCTI) e pareceres agronômicos com Google Gemini.
+Plataforma de inteligência geoespacial com descoberta de cenas Sentinel-2 via catálogo STAC, extração de bandas COG, cálculo determinístico de índices espectrais, classificação LULC baseada em regras, estimativa de carbono e geração opcional de pareceres via Gemini. Os resultados de classificação e carbono são estimativas computacionais e não substituem validação de campo ou certificação regulatória.
+
+![Geo-AI V4 architecture](./docs/diagrams/geo-ai-v4-architecture.svg)
 
 > **Princípio Fundamental:** Dados reais na entrada → Processamento determinístico rastreável → Evidências e proveniência na saída.
 
@@ -75,7 +77,7 @@ A pipeline v4 executa as seguintes etapas determinísticas para cada análise su
 
 ## 🔐 Controle de Acesso Baseado em Papéis (RBAC)
 
-O sistema implementa dois perfis de acesso com autenticação segura no backend via HTTPS (`POST /api/auth/login`) e credenciais injetadas externamente via variáveis de ambiente (`ADMIN_PASSWORD`, `OPERATOR_PASSWORD` / Google Secret Manager):
+O sistema implementa dois perfis de acesso no backend (`POST /api/auth/login`). **Atenção:** `server/auth.ts` contém senhas e segredo de assinatura padrão para desenvolvimento (`agentic`, `funcionario` e um segredo fixo). A implantação deve sobrescrever `AUTH_SECRET`, `ADMIN_PASSWORD` e `OPERATOR_PASSWORD` com valores fortes e únicos via Secret Manager; não trate os defaults do repositório como seguros para produção.
 
 | Perfil | Identificador (Role) | Permissões & Capacidades | Restrições |
 | :--- | :--- | :--- | :--- |
@@ -92,7 +94,7 @@ Todos os endpoints operam sob o prefixo `/api` e `/api/v1`:
 - **`GET /api/v1/health`**
   - Retorna o status de integridade do runtime Node.js, versão da API, métricas de memória e capacidades do motor espectral (Float32Array / CPU SIMD).
 - **`GET /api/v1/providers/status`**
-  - Verifica em tempo real o estado de conectividade do catálogo STAC Sentinel-2 e do Google Earth Engine.
+  - Verifica a disponibilidade do catálogo STAC e consulta o endpoint público de descoberta do Google Earth Engine. O probe atual não envia uma chamada autenticada ao projeto Earth Engine; portanto, `CONNECTED` não comprova autenticação ou permissão de acesso a coleções. A busca de cenas via Earth Engine não está implementada e o adaptador retorna uma lista vazia quando conectado. A descoberta de cenas implementada usa o catálogo STAC público.
 
 ### 2. Descoberta & Pipeline Geoespacial Real
 - **`POST /api/v1/satellite/search`**
@@ -171,7 +173,7 @@ Acesse em seu navegador: **http://localhost:3000**
 
 ## 📦 Build & Deploy no Google Cloud Run
 
-A aplicação está configurada para deploy automático em containers sem dependências ocultas:
+O workflow `.github/workflows/deploy.yml` dispara deploy para Cloud Run em pushes a `main`/`master`. No estado atual, não executa testes/lint como gates de release e a chamada de health check é informativa, não bloqueante. Além disso, `server.ts` escuta na porta fixa 3000 enquanto o `Dockerfile` declara `PORT=8080`, uma divergência de configuração que exige correção e teste do container antes de confirmar a prontidão em Cloud Run. Um workflow concluído não garante que o serviço passou por uma verificação de saúde bloqueante.
 
 ### Compilação de Produção
 ```bash
@@ -185,4 +187,4 @@ O comando executa:
 ```bash
 npm start
 ```
-Inicia `node dist/server.cjs` escutando em **`0.0.0.0:3000`**, atendendo rigorosamente aos requisitos do Google Cloud Run e proxies reversos.
+Inicia `node dist/server.cjs`. A divergência de porta descrita acima precisa ser corrigida e validada antes de promover a imagem para Cloud Run.
