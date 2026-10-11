@@ -92,7 +92,7 @@ Todos os endpoints operam sob o prefixo `/api` e `/api/v1`:
 - **`GET /api/v1/health`**
   - Retorna o status de integridade do runtime Node.js, versão da API, métricas de memória e capacidades do motor espectral (Float32Array / CPU SIMD).
 - **`GET /api/v1/providers/status`**
-  - Verifica em tempo real o estado de conectividade do catálogo STAC Sentinel-2 e do Google Earth Engine.
+  - Verifica a conectividade do catálogo STAC e do endpoint Google Earth Engine. A conectividade do Earth Engine não significa que a busca de cenas via Earth Engine esteja implementada; atualmente esse adaptador retorna uma lista vazia quando conectado. A descoberta de cenas implementada usa o catálogo STAC público.
 
 ### 2. Descoberta & Pipeline Geoespacial Real
 - **`POST /api/v1/satellite/search`**
@@ -171,7 +171,7 @@ Acesse em seu navegador: **http://localhost:3000**
 
 ## 📦 Build & Deploy no Google Cloud Run
 
-A aplicação está configurada para deploy automático em containers sem dependências ocultas:
+O workflow `.github/workflows/deploy.yml` dispara deploy para Cloud Run em pushes a `main`/`master`. No estado atual, não executa testes/lint como gates de release e a chamada de health check é informativa, não bloqueante. Um workflow concluído não garante que o serviço passou por uma verificação de saúde bloqueante.
 
 ### Compilação de Produção
 ```bash
@@ -185,4 +185,4 @@ O comando executa:
 ```bash
 npm start
 ```
-Inicia `node dist/server.cjs` escutando em **`0.0.0.0:3000`**, atendendo rigorosamente aos requisitos do Google Cloud Run e proxies reversos.
+Inicia `node dist/server.cjs`. O container define `PORT=8080` por padrão; o servidor deve respeitar `process.env.PORT`. Em desenvolvimento, `npm run dev` usa a porta 3000.
