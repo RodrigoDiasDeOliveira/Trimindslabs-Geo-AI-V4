@@ -171,7 +171,7 @@ Acesse em seu navegador: **http://localhost:3000**
 
 ## 📦 Build & Deploy no Google Cloud Run
 
-O workflow `.github/workflows/deploy.yml` dispara deploy para Cloud Run em pushes a `main`/`master`. No estado atual, não executa testes/lint como gates de release e a chamada de health check é informativa, não bloqueante. Um workflow concluído não garante que o serviço passou por uma verificação de saúde bloqueante.
+O workflow `.github/workflows/deploy.yml` dispara deploy para Cloud Run em pushes a `main`/`master`. No estado atual, não executa testes/lint como gates de release e a chamada de health check é informativa, não bloqueante. Além disso, `server.ts` escuta na porta fixa 3000 enquanto o `Dockerfile` declara `PORT=8080`, uma divergência de configuração que exige correção e teste do container antes de confirmar a prontidão em Cloud Run. Um workflow concluído não garante que o serviço passou por uma verificação de saúde bloqueante.
 
 ### Compilação de Produção
 ```bash
@@ -185,4 +185,4 @@ O comando executa:
 ```bash
 npm start
 ```
-Inicia `node dist/server.cjs`. O container define `PORT=8080` por padrão; o servidor deve respeitar `process.env.PORT`. Em desenvolvimento, `npm run dev` usa a porta 3000.
+Inicia `node dist/server.cjs`. **Divergência encontrada:** `server.ts` define a porta como `3000`, enquanto o `Dockerfile` define `PORT=8080`. O servidor não lê `process.env.PORT` nessa versão. Isso precisa ser corrigido e validado antes de afirmar que o container está pronto para Cloud Run; o health check atual do workflow é não bloqueante. Em desenvolvimento, `npm run dev` também usa a porta 3000.
