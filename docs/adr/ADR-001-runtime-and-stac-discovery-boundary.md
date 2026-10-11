@@ -5,7 +5,7 @@
 
 ## Context
 
-The V4 deployment repository uses a Node.js/Express and TypeScript runtime. The implemented satellite scene discovery path uses the public Earth Search STAC catalog. The Earth Engine adapter can report provider connectivity, but scene search through that adapter is not implemented and returns an empty result.
+The V4 deployment repository uses a Node.js/Express and TypeScript runtime. The implemented satellite scene discovery path uses the public Earth Search STAC catalog. The Earth Engine adapter checks whether credentials-related environment variables exist and probes the public discovery endpoint, but does not send an authenticated request using those credentials. A `CONNECTED` result is therefore not proof of project authentication or permission to access image collections. Scene search through that adapter is not implemented and returns an empty result.
 
 ## Decision proposed
 
