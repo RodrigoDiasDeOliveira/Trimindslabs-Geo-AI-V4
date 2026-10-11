@@ -75,7 +75,7 @@ A pipeline v4 executa as seguintes etapas determinísticas para cada análise su
 
 ## 🔐 Controle de Acesso Baseado em Papéis (RBAC)
 
-O sistema implementa dois perfis de acesso com autenticação segura no backend via HTTPS (`POST /api/auth/login`) e credenciais injetadas externamente via variáveis de ambiente (`ADMIN_PASSWORD`, `OPERATOR_PASSWORD` / Google Secret Manager):
+O sistema implementa dois perfis de acesso no backend (`POST /api/auth/login`). **Atenção:** `server/auth.ts` contém senhas e segredo de assinatura padrão para desenvolvimento (`agentic`, `funcionario` e um segredo fixo). A implantação deve sobrescrever `AUTH_SECRET`, `ADMIN_PASSWORD` e `OPERATOR_PASSWORD` com valores fortes e únicos via Secret Manager; não trate os defaults do repositório como seguros para produção.
 
 | Perfil | Identificador (Role) | Permissões & Capacidades | Restrições |
 | :--- | :--- | :--- | :--- |
@@ -185,4 +185,4 @@ O comando executa:
 ```bash
 npm start
 ```
-Inicia `node dist/server.cjs`. **Divergência encontrada:** `server.ts` define a porta como `3000`, enquanto o `Dockerfile` define `PORT=8080`. O servidor não lê `process.env.PORT` nessa versão. Isso precisa ser corrigido e validado antes de afirmar que o container está pronto para Cloud Run; o health check atual do workflow é não bloqueante. Em desenvolvimento, `npm run dev` também usa a porta 3000.
+Inicia `node dist/server.cjs`. A divergência de porta descrita acima precisa ser corrigida e validada antes de promover a imagem para Cloud Run.
