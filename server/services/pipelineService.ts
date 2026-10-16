@@ -159,8 +159,7 @@ export class GeoSpatialPipelineService {
     const eviStats = computePixelStatistics(eviMatrix, 0.0, 1.2);
 
     // STAGE 5: Geo-AI Inference (Rule-based spectral LULC classification)
-    const modelName = request.selectedModel || 'rule_based_spectral_v4';
-    this.updateJobProgress(jobId, 'running_inference', 75, `Executando classificação espectral determinística de uso e cobertura do solo...`);
+    this.updateJobProgress(jobId, 'running_inference', 75, `Executando classificador espectral determinístico (não é inferência de CNN/Transformer)...`);
     
     const classification = classifySpectralTensor(rasterStack, ndviMatrix, ndreMatrix, eviMatrix);
 
@@ -200,6 +199,7 @@ export class GeoSpatialPipelineService {
       correlationId,
       analysisId: jobId,
       pipelineVersion: '4.0.0-real-sentinel2',
+      requestedModel: request.selectedModel || 'not-specified',
       provider: providerName,
       dataset: datasetName,
       sceneId: chosenScene.id,
@@ -234,7 +234,7 @@ export class GeoSpatialPipelineService {
         totalProcessingTimeMs,
         pixelsProcessed: classification.pixelsProcessed,
         spatialResolutionMeters: rasterStack.resolutionMeters,
-        modelsExecuted: [modelName, 'Rule-Based-Spectral-LULC-Classifier-v4']
+        modelsExecuted: ['Rule-Based-Spectral-Classifier-v4']
       },
       vegetation: {
         ndvi: ndviStats,
