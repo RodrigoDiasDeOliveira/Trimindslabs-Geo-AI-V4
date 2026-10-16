@@ -14,7 +14,8 @@ const CLASS_DEFINITIONS = [
   { code: 2, id: 'Pasture', name: 'Pastagem Produtiva', color: '#a3e635' },
   { code: 3, id: 'River', name: 'Recursos Hídricos / Rios', color: '#0284c7' },
   { code: 4, id: 'HerbaceousVegetation', name: 'Vegetação Herbácea / Cerrado', color: '#84cc16' },
-  { code: 5, id: 'Highway', name: 'Infraestrutura / Solo Exposto', color: '#64748b' }
+  { code: 5, id: 'BareSoil', name: 'Solo Exposto (classe espectral)', color: '#a16207' },
+  { code: 6, id: 'BuiltUpCandidate', name: 'Área Construída / Urbana (candidata)', color: '#ec4899' }
 ];
 
 /**
@@ -42,38 +43,45 @@ export function classifySpectralTensor(
     const swirVal = raster.swir[i];
     const blueVal = raster.blue[i];
 
-    let assignedClassCode = 1; // Default to AnnualCrop
-    let confidence = 0.85;
+    // Conservative fallback: do not bias unclassified pixels toward annual crops.
+    let assignedClassCode = 5; // BareSoil candidate
+    let confidence = 0.45;
 
-    // 1. Water detection: Negative NDVI or high absorption in NIR/SWIR and higher blue
-    if (ndviVal < 0.05 || (blueVal > redVal && nirVal < 0.08)) {
-      assignedClassCode = 3; // River
-      confidence = Math.min(0.98, 0.82 + Math.abs(ndviVal) * 0.3);
+    // Water requires a negative vegetation signal or a low-NIR / blue-dominant signature.
+    // A low NDVI alone is not enough to label a pixel as water.
+    if (ndviVal < -0.05 || (ndviVal < 0.10 && nirVal < 0.08 && blueVal > redVal * 1.1)) {
+      assignedClassCode = 3; // River / water candidate
+      confidence = Math.min(0.95, 0.72 + Math.abs(Math.min(ndviVal, 0)) * 0.3);
     }
-    // 2. Forest: Very high NDVI (> 0.72) and high NDRE (> 0.50) with high NIR and low Red
+    // Forest: high vegetation vigor with a strong red-edge signal.
     else if (ndviVal >= 0.72 && ndreVal >= 0.48 && nirVal > 0.45) {
-      assignedClassCode = 0; // Forest
-      confidence = Math.min(0.99, 0.88 + (ndviVal - 0.72) * 0.4);
+      assignedClassCode = 0;
+      confidence = Math.min(0.95, 0.78 + (ndviVal - 0.72) * 0.4);
     }
-    // 3. Annual Crops: High NDVI (0.55 to 0.75) and moderate-to-high NDRE
+    // Annual crop: strong vegetation signal. This remains a spectral heuristic, not a trained DL model.
     else if (ndviVal >= 0.55 && nirVal > 0.40) {
-      assignedClassCode = 1; // AnnualCrop
-      confidence = Math.min(0.97, 0.85 + (ndviVal - 0.55) * 0.3);
+      assignedClassCode = 1;
+      confidence = Math.min(0.90, 0.70 + (ndviVal - 0.55) * 0.3);
     }
-    // 4. Pasture: Moderate NDVI (0.35 to 0.55) with lower NDRE
+    // Pasture: moderate vegetation signal.
     else if (ndviVal >= 0.35 && nirVal > 0.30) {
-      assignedClassCode = 2; // Pasture
-      confidence = 0.88;
+      assignedClassCode = 2;
+      confidence = 0.68;
     }
-    // 5. Herbaceous / Savanna: NDVI 0.20 to 0.35
+    // Herbaceous vegetation / savanna.
     else if (ndviVal >= 0.20) {
-      assignedClassCode = 4; // HerbaceousVegetation
-      confidence = 0.84;
+      assignedClassCode = 4;
+      confidence = 0.64;
     }
-    // 6. Bare soil / Infrastructure / Roads: Low NDVI (< 0.20) and high SWIR/Red
+    // Built-up is only a candidate class: spectral thresholds cannot reliably prove residential land use.
+    else if (ndviVal < 0.20 && nirVal < 0.25 && swirVal > 0.18 && (redVal > 0.08 || blueVal > 0.08)) {
+      assignedClassCode = 6;
+      confidence = 0.55;
+    }
+    // Low vegetation with no stronger signature is retained as bare-soil candidate.
     else {
-      assignedClassCode = 5; // Highway / Bare soil
-      confidence = 0.90;
+      assignedClassCode = 5;
+      confidence = 0.50;
     }
 
     pixelClassMatrix[i] = assignedClassCode;

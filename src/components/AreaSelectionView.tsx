@@ -332,7 +332,6 @@ export const AreaSelectionView: React.FC = () => {
                 meanNdre: finalResult.vegetation.ndre.mean,
                 carbonStockTon: finalResult.carbonAudit.totalEstimatedStockTonCO2e,
                 carStatus: finalResult.compliance.carStatus,
-                macroF1: 0.985,
                 classBreakdown: finalResult.lulcBreakdown.map(c => ({
                   classId: c.classId,
                   className: c.className,
