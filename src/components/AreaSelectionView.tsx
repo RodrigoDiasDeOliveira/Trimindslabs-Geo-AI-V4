@@ -317,6 +317,7 @@ export const AreaSelectionView: React.FC = () => {
               sourceFormat: selectedFormat,
               center: finalResult.centroid,
               bbox: finalResult.bbox,
+              geometry: finalResult.geometry,
               areaHectares: finalResult.totalHectares,
               selectedModel: selectedModel,
               notes: `Auditada via pipeline v4.0.0. Sensor: Sentinel-2 L2A BOA. Resolução: ${finalResult.executionMetrics.spatialResolutionMeters}m. Provedor: ${finalResult.provenance.provider}.`,
@@ -440,18 +441,27 @@ export const AreaSelectionView: React.FC = () => {
 
   // Save Modal Handlers
   const handleOpenSaveModal = () => {
-    setSaveTitle(`Análise ${selectedPreset.name} - ${farmName}`);
-    setSaveNotes(`Área de ${calculatedHectares.toLocaleString('pt-BR')} ha analisada via sensor Sentinel-2 L2A.`);
+    // The report title must be entered intentionally by the operator.
+    setSaveTitle('');
+    setSaveNotes(currentAnalysis?.notes || `Área de ${calculatedHectares.toLocaleString('pt-BR')} ha analisada via sensor Sentinel-2 L2A.`);
     setIsSaveModalOpen(true);
   };
 
   const handleConfirmSave = () => {
-    if (!currentAnalysis) return;
+    const title = saveTitle.trim();
+    if (!currentAnalysis) {
+      setNotification('Execute ou selecione uma análise antes de salvá-la.');
+      return;
+    }
+    if (!title) {
+      setNotification('Informe o Título do Laudo para continuar.');
+      return;
+    }
     const newSave: SavedAreaAnalysis = {
       ...currentAnalysis,
       id: `saved_${Date.now()}`,
-      title: saveTitle || currentAnalysis.title,
-      notes: saveNotes || currentAnalysis.notes,
+      title,
+      notes: saveNotes.trim() || currentAnalysis.notes,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -1168,10 +1178,43 @@ export const AreaSelectionView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
+                        // Restore the saved ROI and context rather than only moving the map center.
                         setCurrentAnalysis(analysis);
                         setLiveAnalysisResult(null);
+                        setFarmName(analysis.farmName);
                         setCenterLat(analysis.center.lat);
                         setCenterLng(analysis.center.lng);
+                        setSelectedSourceType(analysis.sourceType);
+                        setSelectedFormat(analysis.sourceFormat);
+                        setSelectedModel(analysis.selectedModel);
+                        const savedBbox = analysis.bbox;
+                        const matchingPreset = PRESET_REGIONS.find(
+                          (preset) => preset.name === analysis.region || preset.id === analysis.region
+                        );
+                        setSelectedPreset(matchingPreset || {
+                          ...PRESET_REGIONS[0],
+                          id: `saved-region-${analysis.id}`,
+                          name: analysis.region,
+                          farm: analysis.farmName,
+                          biome: analysis.biome,
+                          center: analysis.center,
+                          bbox: savedBbox
+                        });
+                        const widthKm = Math.abs(savedBbox[2] - savedBbox[0]) * 111.32 * Math.cos((analysis.center.lat * Math.PI) / 180);
+                        const heightKm = Math.abs(savedBbox[3] - savedBbox[1]) * 110.574;
+                        setBboxWidthKm(Math.max(0.01, widthKm));
+                        setBboxHeightKm(Math.max(0.01, heightKm));
+                        const savedRing = analysis.geometry?.coordinates?.[0] || [
+                          [savedBbox[0], savedBbox[1]],
+                          [savedBbox[2], savedBbox[1]],
+                          [savedBbox[2], savedBbox[3]],
+                          [savedBbox[0], savedBbox[3]],
+                          [savedBbox[0], savedBbox[1]]
+                        ];
+                        setDrawnPolygon(savedRing.map((point) => [point[0], point[1]]));
+                        setAvailableScenes([]);
+                        setSelectedScene(null);
+                        setSceneSearchError(null);
                         setActiveTab('picker');
                       }}
                       className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold transition-colors cursor-pointer"
@@ -1217,6 +1260,8 @@ export const AreaSelectionView: React.FC = () => {
                   type="text"
                   value={saveTitle}
                   onChange={(e) => setSaveTitle(e.target.value)}
+                  required
+                  aria-required="true"
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -1243,7 +1288,8 @@ export const AreaSelectionView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmSave}
-                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20"
+                disabled={!saveTitle.trim() || !currentAnalysis}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Confirmar e Salvar
               </button>
