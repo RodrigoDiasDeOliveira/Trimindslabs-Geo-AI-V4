@@ -15,7 +15,6 @@ import {
   Play, 
   Cpu, 
   Layers, 
-  CheckCircle2, 
   Upload, 
   Sliders, 
   BarChart3, 
@@ -710,7 +709,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                 </button>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                {adapterEnabled ? t.studio.adapterEnabled : t.studio.adapterDisabled}
+                Esta opção é apenas visual nesta versão: nenhum adaptador é carregado ou executado pela pipeline atual.
               </p>
               <div className="text-[11px] text-slate-500 bg-slate-900/80 p-2 rounded border border-slate-800 flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
@@ -840,9 +839,11 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                     </span>
                   </div>
 
-                  <div className="absolute bottom-3 right-3 bg-slate-950/80 backdrop-blur-sm border border-slate-700/60 rounded-lg px-3 py-1 text-[11px] font-mono text-emerald-400">
-                    BBox: [{selectedSample.coordinates.bbox.join(', ')}]
-                  </div>
+                  {!customFile && (
+                    <div className="absolute bottom-3 right-3 bg-slate-950/80 backdrop-blur-sm border border-slate-700/60 rounded-lg px-3 py-1 text-[11px] font-mono text-emerald-400">
+                      BBox da amostra: [{selectedSample.coordinates.bbox.join(', ')}]
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -869,7 +870,6 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
             >
               Abrir pipeline geoespacial disponível
             </button>
-          </div>
           </div>
         </div>
       </div>
