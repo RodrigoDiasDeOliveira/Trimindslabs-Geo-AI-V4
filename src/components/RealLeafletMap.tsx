@@ -261,7 +261,7 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
           const p = feature.properties || {};
           const popupContent = `
             <div class="font-sans text-xs p-1 space-y-1 text-slate-900">
-              <div class="font-bold text-sm border-b pb-1" style="color: ${p.color || '#000'}">${p.className || 'Classe LULC'}</div>
+              <div class="font-bold text-sm border-b pb-1" style="color: ${p.color || '#000'}">${p.className || 'Classe de cobertura do solo'}</div>
               <div><strong>Área:</strong> ${p.hectares ? p.hectares.toLocaleString('pt-BR') : '-'} ha</div>
               <div><strong>Pixels:</strong> ${p.pixels ? p.pixels.toLocaleString('pt-BR') : '-'}</div>
               <div><strong>NDVI Médio:</strong> ${p.meanNdvi ?? '-'}</div>
