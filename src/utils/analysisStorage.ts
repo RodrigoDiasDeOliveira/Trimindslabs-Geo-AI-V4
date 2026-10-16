@@ -3,18 +3,35 @@ import { INITIAL_SAVED_ANALYSES } from '../data/mapSourcesData';
 
 const STORAGE_KEY = 'triminds_saved_area_analyses_v1';
 
+// Known demo records are excluded during migration, while user-created records are preserved.
+const DEMO_ANALYSIS_IDS = new Set(INITIAL_SAVED_ANALYSES.map((analysis) => analysis.id));
+
 export const getSavedAnalyses = (): SavedAreaAnalysis[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      // Seed default analyses
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAVED_ANALYSES));
-      return INITIAL_SAVED_ANALYSES;
+      // Start with an empty library; demo fixtures must not appear as user analyses.
+      return [];
     }
-    return JSON.parse(raw);
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.error('Saved analyses storage is not an array; preserving the raw value for recovery.');
+      return [];
+    }
+
+    const userAnalyses = (parsed as SavedAreaAnalysis[]).filter(
+      (analysis) => analysis && typeof analysis.id === 'string' && !DEMO_ANALYSIS_IDS.has(analysis.id)
+    );
+
+    // One-time cleanup of known seeded examples only; all other saved records remain intact.
+    if (userAnalyses.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(userAnalyses));
+    }
+    return userAnalyses;
   } catch (err) {
     console.error('Failed to parse saved analyses from localStorage', err);
-    return INITIAL_SAVED_ANALYSES;
+    return [];
   }
 };
 
