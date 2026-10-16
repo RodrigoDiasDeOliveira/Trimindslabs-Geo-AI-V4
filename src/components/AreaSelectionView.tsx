@@ -124,6 +124,7 @@ export const AreaSelectionView: React.FC = () => {
   // AI Agronomic Report State
   const [aiReportLoading, setAiReportLoading] = useState<boolean>(false);
   const [aiReportText, setAiReportText] = useState<string | null>(null);
+  const [aiReportError, setAiReportError] = useState<string | null>(null);
 
   // Load provider statuses on mount
   const fetchProviderStatuses = async () => {
@@ -365,6 +366,8 @@ export const AreaSelectionView: React.FC = () => {
   const handleGenerateAiReport = async () => {
     if (!currentAnalysis && !liveAnalysisResult) return;
     setAiReportLoading(true);
+    setAiReportError(null);
+    setAiReportText(null);
     try {
       const payload = liveAnalysisResult ? {
         farmName: liveAnalysisResult.farmName,
@@ -376,7 +379,7 @@ export const AreaSelectionView: React.FC = () => {
         carbonStockTon: liveAnalysisResult.carbonAudit.totalEstimatedStockTonCO2e,
         carStatus: liveAnalysisResult.compliance.carStatus,
         classBreakdown: liveAnalysisResult.lulcBreakdown,
-        modelUsed: selectedModel
+        modelUsed: liveAnalysisResult.executionMetrics.modelsExecuted.join(', ')
       } : {
         farmName: currentAnalysis!.farmName,
         region: currentAnalysis!.region,
@@ -395,12 +398,13 @@ export const AreaSelectionView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (data?.report) {
-        setAiReportText(data.report);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.success !== true || typeof data?.report !== 'string' || !data.report.trim()) {
+        throw new Error(data?.message || data?.error || 'O serviço não retornou um parecer válido.');
       }
-    } catch {
-      setAiReportText("Parecer de Inteligência Agronômica (Triminds GeoAI): O talhão monitorado apresenta alta densidade vegetal consistente com culturas anuais de ciclo estival e áreas de reserva legal com cobertura intacta.");
+      setAiReportText(data.report);
+    } catch (err: any) {
+      setAiReportError(err?.message || 'Não foi possível gerar o parecer. Nenhum relatório foi substituído por texto fictício.');
     } finally {
       setAiReportLoading(false);
     }
@@ -1097,6 +1101,12 @@ export const AreaSelectionView: React.FC = () => {
                       <span>{aiReportLoading ? 'Gerando Laudo...' : 'Gerar Parecer com Gemini'}</span>
                     </button>
                   </div>
+
+                  {aiReportError && (
+                    <div role="alert" className="p-3 rounded-xl border border-rose-500/40 bg-rose-500/10 text-xs text-rose-300">
+                      <strong>O parecer não foi gerado.</strong> {aiReportError}
+                    </div>
+                  )}
 
                   {aiReportText && (
                     <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 font-sans leading-relaxed whitespace-pre-line">
