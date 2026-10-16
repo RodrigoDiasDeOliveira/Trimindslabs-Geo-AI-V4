@@ -2,11 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { 
   GEO_SAMPLES, 
-  LULC_CLASSES, 
   DEEP_LEARNING_MODELS, 
   GeoSample, 
-  DeepLearningModel, 
-  LulcClass 
 } from '../data/geoData';
 import { 
   PRESET_REGIONS, 
@@ -172,8 +169,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
   const [selectedModelId, setSelectedModelId] = useState<string>('resnet50');
   const [adapterEnabled, setAdapterEnabled] = useState<boolean>(true);
   const [spectralTab, setSpectralTab] = useState<'rgb' | 'nir' | 'ndvi' | 'ndre' | 'embedding'>('rgb');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [hasInferred, setHasInferred] = useState<boolean>(true);
+  const [hasInferred, setHasInferred] = useState<boolean>(false);
   const [customFile, setCustomFile] = useState<{ 
     name: string; 
     size: string; 
@@ -184,34 +180,42 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
 
   const selectedModel = DEEP_LEARNING_MODELS.find(m => m.id === selectedModelId) || DEEP_LEARNING_MODELS[0];
-  const primaryClass = LULC_CLASSES.find(c => c.id === selectedSample.defaultClassId) || LULC_CLASSES[0];
 
-  const handleRunInference = (overrideLatency?: number) => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setHasInferred(true);
-    }, overrideLatency || 650);
+  const handleOpenRealAnalysis = () => {
+    if (customFile) {
+      setUploadFeedback('O arquivo está disponível apenas para visualização nesta tela; nenhum processamento raster ou inferência foi executado. Use a análise geoespacial com cena Sentinel-2 ou implemente o processamento de upload antes de avaliar este arquivo.');
+      return;
+    }
+    if (onOpenMapSelector) {
+      onOpenMapSelector();
+      return;
+    }
+    setUploadFeedback('A pipeline geoespacial real não está conectada a este painel. Nenhuma inferência foi executada.');
   };
 
-  // Enhanced File Upload Handler (JPG, PNG, GeoTIFF, Tensor, NPY, PT, BIN)
+  // Uploads are preview-only in this panel until a real raster inference endpoint exists.
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    let formatLabel = 'Imagem Raster';
-    let channels = 3;
+    let formatLabel = 'Arquivo não processado';
+    let channels = 0;
+    const isImage = file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
 
     if (['tif', 'tiff', 'geotiff', 'cog'].includes(ext)) {
-      formatLabel = 'GeoTIFF Multiespectral (COG)';
-      channels = 12;
+      formatLabel = 'GeoTIFF multiespectral (não processado)';
+      channels = 0;
     } else if (['npy', 'tensor', 'pt', 'bin'].includes(ext)) {
-      formatLabel = 'Tensor de Embeddings (64 Canais)';
-      channels = 64;
-    } else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
-      formatLabel = `Foto Satelital (${ext.toUpperCase()})`;
-      channels = 4;
+      formatLabel = 'Tensor/embedding (não processado)';
+      channels = 0;
+    } else if (isImage) {
+      formatLabel = `Imagem para visualização (${ext.toUpperCase()})`;
+      channels = 3;
+    } else {
+      setUploadFeedback('Formato não suportado para visualização. Nenhuma análise foi executada.');
+      e.target.value = '';
+      return;
     }
 
     setCustomFile({
@@ -220,70 +224,48 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
       channels,
       format: formatLabel
     });
+    setHasInferred(false);
 
-    // If image format, read as data URL for actual visualization
-    if (file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+    if (isImage) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const resultUrl = event.target?.result as string;
         setUploadedPreviewUrl(resultUrl);
-
         setSelectedSample({
           ...GEO_SAMPLES[0],
-          id: `upload-${Date.now()}`,
+          id: `upload-preview-${Date.now()}`,
           name: {
-            'pt-BR': `Imagem Carregada: ${file.name}`,
-            en: `Uploaded Image: ${file.name}`,
-            es: `Imagen Subida: ${file.name}`
+            'pt-BR': `Visualização: ${file.name}`,
+            en: `Preview: ${file.name}`,
+            es: `Vista previa: ${file.name}`
           },
           previewUrl: resultUrl,
           channels
         });
-
-        // Trigger automatic inference and visualization
-        handleRunInference(700);
-        setUploadFeedback(`Foto "${file.name}" carregada, analisada e visualizada com sucesso!`);
-        setTimeout(() => setUploadFeedback(null), 5000);
+        setUploadFeedback(`Arquivo "${file.name}" carregado para visualização. Nenhuma inferência ou classificação foi executada.`);
+      };
+      reader.onerror = () => {
+        setUploadedPreviewUrl(null);
+        setUploadFeedback('Não foi possível ler a imagem para visualização.');
       };
       reader.readAsDataURL(file);
     } else {
-      // For GeoTIFF / Tensors
-      const syntheticPreview = 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80';
-      setUploadedPreviewUrl(syntheticPreview);
-
+      setUploadedPreviewUrl(null);
       setSelectedSample({
         ...GEO_SAMPLES[0],
-        id: `upload-${Date.now()}`,
+        id: `upload-metadata-${Date.now()}`,
         name: {
-          'pt-BR': `${formatLabel}: ${file.name}`,
-          en: `${formatLabel}: ${file.name}`,
-          es: `${formatLabel}: ${file.name}`
+          'pt-BR': `Arquivo não processado: ${file.name}`,
+          en: `Unprocessed file: ${file.name}`,
+          es: `Archivo no procesado: ${file.name}`
         },
-        channels
+        previewUrl: '',
+        channels: 0
       });
-
-      if (channels === 64) {
-        setSpectralTab('embedding');
-      }
-
-      handleRunInference(800);
-      setUploadFeedback(`Arquivo ${formatLabel} "${file.name}" importado e inferência de cobertura do solo executada!`);
-      setTimeout(() => setUploadFeedback(null), 5000);
+      setUploadFeedback(`Arquivo "${file.name}" recebido apenas como metadado. Este painel não processa GeoTIFF/tensores e não produziu resultado.`);
     }
   };
 
-  // Compute deterministic probabilities based on selected sample & model
-  const classProbabilities = LULC_CLASSES.map(cls => {
-    const isPrimary = cls.id === selectedSample.defaultClassId;
-    const baseScore = isPrimary 
-      ? (adapterEnabled ? selectedModel.topClassScores[cls.id] || 0.985 : 0.62)
-      : (adapterEnabled ? (1 - (selectedModel.topClassScores[selectedSample.defaultClassId] || 0.98)) / 9 : 0.38 / 9);
-    
-    return {
-      class: cls,
-      probability: Math.min(0.999, Math.max(0.005, Number(baseScore.toFixed(4))))
-    };
-  }).sort((a, b) => b.probability - a.probability);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -305,32 +287,23 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
           {sourceMode === 'saved_library' && (
             <button
               type="button"
-              onClick={() => handleRunInference(500)}
+              onClick={handleOpenRealAnalysis}
               disabled={isProcessing}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs text-sky-950 bg-sky-400 hover:bg-sky-300 transition-all shadow-md shadow-sky-500/20 disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
-              <span>Reavaliar Classificação</span>
+              <span>Abrir análise geoespacial</span>
             </button>
           )}
 
           <button
             id="btn-run-inference-main"
-            onClick={() => handleRunInference()}
-            disabled={isProcessing}
-            className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl font-semibold text-sm text-slate-950 bg-emerald-400 hover:bg-emerald-300 active:scale-95 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+            type="button"
+            onClick={handleOpenRealAnalysis}
+            className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl font-semibold text-sm text-slate-950 bg-emerald-400 hover:bg-emerald-300 active:scale-95 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
           >
-            {isProcessing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
-                <span>{t.common.running}</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current" />
-                <span>{t.common.runInference}</span>
-              </>
-            )}
+            <Play className="w-4 h-4 fill-current" />
+            <span>Abrir análise geoespacial real</span>
           </button>
         </div>
       </div>
@@ -686,7 +659,15 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                     <button
                       key={model.id}
                       id={`model-select-${model.id}`}
-                      onClick={() => setSelectedModelId(model.id)}
+                      onClick={() => {
+                        const accepted = window.confirm(
+                          `${model.name}: esta seleção altera apenas a configuração visual. A pipeline atual executa um classificador espectral baseado em regras, não os pesos de uma CNN/Transformer. Requisitos, adaptadores e métricas de catálogo não comprovam inferência real. Deseja selecionar este modelo solicitado?`
+                        );
+                        if (accepted) {
+                          setSelectedModelId(model.id);
+                          setHasInferred(false);
+                        }
+                      }}
                       className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-sky-500/10 border-sky-500/40 shadow-sm'
@@ -700,9 +681,9 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                        <span>F1: {(model.f1Score * 100).toFixed(1)}%</span>
-                        <span>{t.common.latency}: {model.inferenceLatencyMs}ms</span>
-                        <span className="text-emerald-400 font-medium">64-Bands Native</span>
+                        <span>Família: {model.family}</span>
+                        <span>{model.supports64Bands ? 'Entrada 64 bandas' : 'Entrada limitada'}</span>
+                        <span>{model.adapterRequired ? 'Adaptador exigido' : 'Adaptador opcional'}</span>
                       </div>
                     </button>
                   );
@@ -831,14 +812,20 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
               ) : (
                 /* Image View with Simulated Filter overlays */
                 <div className="w-full h-full relative">
-                  <img
-                    src={uploadedPreviewUrl || selectedSample.previewUrl}
-                    alt={selectedSample.name[language]}
-                    className={`w-full h-full object-cover transition-all duration-300 ${
-                      spectralTab === 'nir' ? 'contrast-125 saturate-200 hue-rotate-90' :
-                      spectralTab === 'ndvi' ? 'grayscale contrast-150 invert sepia hue-rotate-60' : ''
-                    }`}
-                  />
+                  {(uploadedPreviewUrl || (!customFile && selectedSample.previewUrl)) ? (
+                    <img
+                      src={uploadedPreviewUrl || selectedSample.previewUrl}
+                      alt={selectedSample.name[language]}
+                      className={`w-full h-full object-cover transition-all duration-300 ${
+                        spectralTab === 'nir' ? 'contrast-125 saturate-200 hue-rotate-90' :
+                        spectralTab === 'ndvi' ? 'grayscale contrast-150 invert sepia hue-rotate-60' : ''
+                      }`}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center p-6 text-center text-xs text-amber-200">
+                      Pré-visualização indisponível para este formato. O arquivo não foi processado.
+                    </div>
+                  )}
                   {/* Overlay badge with sample info */}
                   <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-sm border border-slate-700/60 rounded-lg px-3 py-1.5 text-xs text-white">
                     <span className="font-semibold">
@@ -857,67 +844,28 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
             </div>
           </div>
 
-          {/* 4. Inference Results & Class Probabilities */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
-                {t.studio.inferenceResultsTitle}
-              </h2>
-              <span className="text-xs text-slate-400 font-mono">
-                {t.common.latency}: {selectedModel.inferenceLatencyMs}ms (Processamento Imediato)
-              </span>
+          {/* Results are not fabricated: this panel does not execute the selected DL model. */}
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-5 space-y-3 shadow-xl">
+            <div className="flex items-center gap-2 text-amber-300">
+              <AlertTriangle className="w-4 h-4" />
+              <h2 className="text-sm font-bold uppercase tracking-wider">Inferência real não executada neste painel</h2>
             </div>
-
-            {/* Primary Classification Card */}
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div 
-                  className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-base shadow-md"
-                  style={{ backgroundColor: `${primaryClass.color}25`, color: primaryClass.color, border: `1px solid ${primaryClass.color}50` }}
-                >
-                  {primaryClass.code}
-                </div>
-                <div>
-                  <div className="text-xs text-slate-400">Classe Primária Identificada</div>
-                  <div className="text-base font-bold text-white">{primaryClass.name[language]}</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">{primaryClass.description[language]}</div>
-                </div>
-              </div>
-
-              <div className="text-right shrink-0">
-                <div className="text-2xl font-black font-mono text-emerald-400">
-                  {(classProbabilities[0].probability * 100).toFixed(1)}%
-                </div>
-                <span className="text-[10px] font-mono text-slate-400">Confiança do Modelo</span>
-              </div>
-            </div>
-
-            {/* Probabilities Distribution List */}
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-slate-400">Distribuição de Probabilidades por Classe</div>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                {classProbabilities.map((item) => (
-                  <div key={item.class.id} className="p-2 bg-slate-950/70 rounded-lg border border-slate-800/80 text-xs flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.class.color }} />
-                      <span className="text-slate-300 font-medium">{item.class.name[language]}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-24 bg-slate-900 h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${item.probability * 100}%`, backgroundColor: item.class.color }}
-                        />
-                      </div>
-                      <span className="font-mono text-[11px] text-slate-300 w-12 text-right">
-                        {(item.probability * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              As antigas probabilidades e o rótulo de classe eram derivados de dados de amostra, não dos pixels enviados. Para evitar resultados fictícios, eles foram removidos. A seleção de modelo aqui é apenas uma solicitação de configuração; a pipeline disponível usa classificação espectral baseada em regras.
+            </p>
+            {customFile && (
+              <p className="text-xs text-amber-200">
+                Arquivo selecionado: {customFile.name}. O upload atual não envia nem processa os pixels no backend; a imagem pode ser visualizada, mas não deve ser interpretada como analisada.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleOpenRealAnalysis}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold"
+            >
+              Abrir pipeline geoespacial disponível
+            </button>
+          </div>
           </div>
         </div>
       </div>
