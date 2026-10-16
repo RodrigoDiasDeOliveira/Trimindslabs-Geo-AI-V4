@@ -113,7 +113,8 @@ export interface SavedAreaAnalysis {
     meanNdre: number;
     carbonStockTon: number;
     carStatus: 'CONFORME' | 'EM_ANALISE' | 'RESTRICAO';
-    macroF1: number;
+    /** Only present when measured against a documented validation dataset. */
+    macroF1?: number;
     classBreakdown: {
       classId: string;
       className: string;
