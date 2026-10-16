@@ -68,7 +68,7 @@ app.get('/api/health', (_req, res) => {
     processingCapabilities: [
       'SENTINEL2_COG_SPECTRAL_EXTRACTION',
       'DETERMINISTIC_VEGETATION_INDICES',
-      'RULE_BASED_SPECTRAL_LULC',
+      'RULE_BASED_LAND_COVER_CLASSIFICATION',
       'IPCC_TIER1_CARBON_AUDIT',
       'CAR_COMPLIANCE_INDICATOR'
     ],

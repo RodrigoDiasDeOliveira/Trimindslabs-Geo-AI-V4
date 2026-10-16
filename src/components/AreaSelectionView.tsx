@@ -72,8 +72,12 @@ export const AreaSelectionView: React.FC = () => {
   const [selectedFormat, setSelectedFormat] = useState<MapDataFormat>('cog_float32');
   
   // Selected Region & Coordinates
-  const [selectedPreset, setSelectedPreset] = useState<PresetRegion>(PRESET_REGIONS[0]);
-  const [farmName, setFarmName] = useState<string>(PRESET_REGIONS[0].farm);
+  const [selectedPreset, setSelectedPreset] = useState<PresetRegion>({
+    ...PRESET_REGIONS[0], id: 'unselected_roi', name: 'Área não selecionada', farm: 'Área não selecionada', biome: 'Não informado'
+  });
+  const [selectedBiome, setSelectedBiome] = useState<string>('Não informado');
+  const [roiTouched, setRoiTouched] = useState<boolean>(false);
+  const [farmName, setFarmName] = useState<string>('Área não selecionada');
   const [centerLat, setCenterLat] = useState<number>(PRESET_REGIONS[0].center.lat);
   const [centerLng, setCenterLng] = useState<number>(PRESET_REGIONS[0].center.lng);
   const [bboxWidthKm, setBboxWidthKm] = useState<number>(8.0);
@@ -152,9 +156,6 @@ export const AreaSelectionView: React.FC = () => {
   useEffect(() => {
     const list = getSavedAnalyses();
     setSavedAnalyses(list);
-    if (list.length > 0) {
-      setCurrentAnalysis(list[0]);
-    }
   }, []);
 
   // Compute bounding box coordinates based on center & dimensions
@@ -178,7 +179,10 @@ export const AreaSelectionView: React.FC = () => {
   // Handle Preset selection
   const handleSelectPreset = (preset: PresetRegion) => {
     setSelectedPreset(preset);
+    setSelectedBiome(preset.biome);
+    setRoiTouched(true);
     setFarmName(preset.farm);
+    setCurrentAnalysis(null);
     setCenterLat(preset.center.lat);
     setCenterLng(preset.center.lng);
     setDrawnPolygon(null);
@@ -192,23 +196,45 @@ export const AreaSelectionView: React.FC = () => {
     setBboxHeightKm(Math.max(3, heightKm || 6));
   };
 
-  // Handle interactive ROI change drawn on map
-  const handleMapRoiChange = (newBbox: [number, number, number, number], polygonCoords: number[][], areaHa: number) => {
-    setDrawnPolygon(polygonCoords);
+  // A drawn or edited ROI is a custom region; do not retain preset metadata.
+  const resetToCustomRegion = (
+    cLat = centerLat,
+    cLng = centerLng,
+    bbox: [number, number, number, number] = computedBbox
+  ) => {
+    const previousPreset = selectedPreset;
+    setRoiTouched(true);
+    setSelectedPreset({
+      ...PRESET_REGIONS[0],
+      id: 'custom_roi',
+      name: 'Área personalizada',
+      farm: 'Área personalizada',
+      biome: 'Não informado',
+      center: { lat: cLat, lng: cLng },
+      bbox,
+      description: 'Área definida manualmente pelo operador; bioma precisa ser informado.'
+    });
+    setSelectedBiome('Não informado');
+    if (farmName === previousPreset.farm) setFarmName('Área personalizada');
+    setCurrentAnalysis(null);
     setLiveAnalysisResult(null);
     setAvailableScenes([]);
     setSelectedScene(null);
+    setSceneSearchError(null);
+  };
 
+  // Handle interactive ROI change drawn on map
+  const handleMapRoiChange = (newBbox: [number, number, number, number], polygonCoords: number[][], _areaHa: number) => {
     const minLng = newBbox[0];
     const minLat = newBbox[1];
     const maxLng = newBbox[2];
     const maxLat = newBbox[3];
-
     const cLat = Number(((minLat + maxLat) / 2).toFixed(5));
     const cLng = Number(((minLng + maxLng) / 2).toFixed(5));
+    resetToCustomRegion(cLat, cLng, newBbox);
+    setDrawnPolygon(polygonCoords);
     setCenterLat(cLat);
     setCenterLng(cLng);
-
     const wKm = Math.abs(maxLng - minLng) * 111.32 * Math.cos((cLat * Math.PI) / 180);
     const hKm = Math.abs(maxLat - minLat) * 110.57;
     setBboxWidthKm(Number(wKm.toFixed(2)));
@@ -257,6 +283,14 @@ export const AreaSelectionView: React.FC = () => {
 
   // 2. REAL PIPELINE EXECUTION (ASYNCHRONOUS WITH OBSERVABILITY)
   const handleRunRealPipeline = async () => {
+    if (!roiTouched) {
+      setNotification('Defina uma área no mapa ou reabra uma análise salva antes de executar. A posição inicial do mapa não é uma região selecionada.');
+      return;
+    }
+    if (selectedBiome === 'Não informado') {
+      setNotification('Selecione o bioma de referência antes de executar a análise. O sistema não aplicará fatores de carbono ou indicadores legais de um bioma presumido.');
+      return;
+    }
     setIsAnalyzing(true);
     setAnalysisProgress(5);
     setAnalysisStageText('Enfileirando job na pipeline geoespacial v4...');
@@ -273,7 +307,7 @@ export const AreaSelectionView: React.FC = () => {
         body: JSON.stringify({
           farmName,
           regionName: selectedPreset.name,
-          biome: selectedPreset.biome,
+          biome: selectedBiome,
           geometry,
           selectedModel,
           maxCloudCover
@@ -313,7 +347,7 @@ export const AreaSelectionView: React.FC = () => {
               title: `Análise ${selectedPreset.name} - ${farmName}`,
               farmName: farmName,
               region: selectedPreset.name,
-              biome: selectedPreset.biome,
+              biome: selectedBiome,
               sourceType: selectedSourceType,
               sourceFormat: selectedFormat,
               center: finalResult.centroid,
@@ -423,7 +457,7 @@ export const AreaSelectionView: React.FC = () => {
     }
   };
 
-  // Real Export: Download CSV of LULC classes
+  // Real Export: Download CSV of classes de cobertura do solo
   const handleDownloadCsv = () => {
     const classes = liveAnalysisResult ? liveAnalysisResult.lulcBreakdown : currentAnalysis?.results.classBreakdown;
     if (!classes) return;
@@ -637,7 +671,7 @@ export const AreaSelectionView: React.FC = () => {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => setBboxHeightKm(prev => Math.max(1, Number((prev - 0.5).toFixed(1))))}
+                        onClick={() => { setBboxHeightKm(prev => Math.max(1, Number((prev - 0.5).toFixed(1)))); resetToCustomRegion(); }}
                         className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-rose-400 flex items-center justify-center text-xs font-bold"
                         title="Diminuir altura do retângulo"
                       >
@@ -646,7 +680,7 @@ export const AreaSelectionView: React.FC = () => {
                       <span className="font-mono text-[10px] text-slate-200 w-8 text-center">{bboxHeightKm}km</span>
                       <button
                         type="button"
-                        onClick={() => setBboxHeightKm(prev => Math.min(30, Number((prev + 0.5).toFixed(1))))}
+                        onClick={() => { setBboxHeightKm(prev => Math.min(30, Number((prev + 0.5).toFixed(1)))); resetToCustomRegion(); }}
                         className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 flex items-center justify-center text-xs font-bold"
                         title="Aumentar altura do retângulo"
                       >
@@ -661,7 +695,7 @@ export const AreaSelectionView: React.FC = () => {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => setBboxWidthKm(prev => Math.max(1, Number((prev - 0.5).toFixed(1))))}
+                        onClick={() => { setBboxWidthKm(prev => Math.max(1, Number((prev - 0.5).toFixed(1)))); resetToCustomRegion(); }}
                         className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-rose-400 flex items-center justify-center text-xs font-bold"
                         title="Diminuir largura do retângulo"
                       >
@@ -670,7 +704,7 @@ export const AreaSelectionView: React.FC = () => {
                       <span className="font-mono text-[10px] text-slate-200 w-8 text-center">{bboxWidthKm}km</span>
                       <button
                         type="button"
-                        onClick={() => setBboxWidthKm(prev => Math.min(30, Number((prev + 0.5).toFixed(1))))}
+                        onClick={() => { setBboxWidthKm(prev => Math.min(30, Number((prev + 0.5).toFixed(1)))); resetToCustomRegion(); }}
                         className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 flex items-center justify-center text-xs font-bold"
                         title="Aumentar largura do retângulo"
                       >
@@ -720,6 +754,30 @@ export const AreaSelectionView: React.FC = () => {
                   className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">Bioma de referência</label>
+                <select
+                  value={selectedBiome}
+                  onChange={(e) => {
+                    const biome = e.target.value;
+                    setSelectedBiome(biome);
+                    setSelectedPreset((previous) => ({ ...previous, biome }));
+                    setCurrentAnalysis(null);
+                    setLiveAnalysisResult(null);
+                  }}
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Não informado">Não informado — selecione antes de analisar</option>
+                  {Array.from(new Set([
+                    ...PRESET_REGIONS.map((preset) => preset.biome),
+                    'Amazônia', 'Cerrado', 'Pantanal', 'Mata Atlântica'
+                  ])).map((biome) => (
+                    <option key={biome} value={biome}>{biome}</option>
+                  ))}
+                </select>
+                {!roiTouched && <p className="text-[10px] text-amber-300 mt-1">Defina a área no mapa ou reabra um registro salvo. A posição inicial é apenas a vista do mapa.</p>}
+                {selectedBiome === 'Não informado' && <p className="text-[10px] text-amber-300 mt-1">Indicadores regulatórios e estimativa de carbono ficam bloqueados até o bioma ser informado.</p>}
+              </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
@@ -729,8 +787,10 @@ export const AreaSelectionView: React.FC = () => {
                     step="0.001"
                     value={centerLat}
                     onChange={(e) => {
-                      setCenterLat(parseFloat(e.target.value));
-                      setDrawnPolygon(null);
+                      const value = parseFloat(e.target.value);
+                        setCenterLat(value);
+                        setDrawnPolygon(null);
+                        resetToCustomRegion(value, centerLng);
                     }}
                     className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg font-mono text-white text-xs"
                   />
@@ -742,8 +802,10 @@ export const AreaSelectionView: React.FC = () => {
                     step="0.001"
                     value={centerLng}
                     onChange={(e) => {
-                      setCenterLng(parseFloat(e.target.value));
-                      setDrawnPolygon(null);
+                      const value = parseFloat(e.target.value);
+                        setCenterLng(value);
+                        setDrawnPolygon(null);
+                        resetToCustomRegion(centerLat, value);
                     }}
                     className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg font-mono text-white text-xs"
                   />
@@ -760,7 +822,7 @@ export const AreaSelectionView: React.FC = () => {
                       min="1"
                       max="30"
                       value={bboxWidthKm}
-                      onChange={(e) => setBboxWidthKm(Math.max(1, parseFloat(e.target.value) || 1))}
+                      onChange={(e) => { setBboxWidthKm(Math.max(1, parseFloat(e.target.value) || 1)); resetToCustomRegion(); }}
                       className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg font-mono text-white text-xs"
                     />
                   </div>
@@ -772,7 +834,7 @@ export const AreaSelectionView: React.FC = () => {
                       min="1"
                       max="30"
                       value={bboxHeightKm}
-                      onChange={(e) => setBboxHeightKm(Math.max(1, parseFloat(e.target.value) || 1))}
+                      onChange={(e) => { setBboxHeightKm(Math.max(1, parseFloat(e.target.value) || 1)); resetToCustomRegion(); }}
                       className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg font-mono text-white text-xs"
                     />
                   </div>
@@ -957,7 +1019,7 @@ export const AreaSelectionView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 3 Metric Cards: Vegetation Indices, LULC Breakdown, Carbon Audit */}
+                {/* 3 Metric Cards: Vegetation Indices, Land-Cover Breakdown, Carbon Audit */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Card 1: Vegetation Indices */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
@@ -999,7 +1061,7 @@ export const AreaSelectionView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Card 2: LULC Classes */}
+                  {/* Card 2: Classes de cobertura do solo */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
                     <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                       <span className="flex items-center gap-1.5">
@@ -1191,6 +1253,8 @@ export const AreaSelectionView: React.FC = () => {
                         setCurrentAnalysis(analysis);
                         setLiveAnalysisResult(null);
                         setFarmName(analysis.farmName);
+                        setSelectedBiome(analysis.biome);
+                        setRoiTouched(true);
                         setCenterLat(analysis.center.lat);
                         setCenterLng(analysis.center.lng);
                         setSelectedSourceType(analysis.sourceType);
