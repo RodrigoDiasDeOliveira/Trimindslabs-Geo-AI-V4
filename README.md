@@ -173,7 +173,7 @@ Acesse em seu navegador: **http://localhost:3000**
 
 ## 📦 Build & Deploy no Google Cloud Run
 
-O workflow `.github/workflows/deploy.yml` dispara deploy para Cloud Run em pushes a `main`/`master`. No estado atual, não executa testes/lint como gates de release e a chamada de health check é informativa, não bloqueante. Além disso, `server.ts` escuta na porta fixa 3000 enquanto o `Dockerfile` declara `PORT=8080`, uma divergência de configuração que exige correção e teste do container antes de confirmar a prontidão em Cloud Run. Um workflow concluído não garante que o serviço passou por uma verificação de saúde bloqueante.
+O workflow `.github/workflows/deploy.yml` executa o deploy para Cloud Run somente quando acionado manualmente (`workflow_dispatch`). A validação é separada do deploy e não publica a aplicação. Além disso, `server.ts` escuta na porta fixa 3000 enquanto o `Dockerfile` declara `PORT=8080`, uma divergência de configuração que exige correção e teste do container antes de confirmar a prontidão em Cloud Run. Um workflow concluído não garante que o serviço passou por uma verificação de saúde bloqueante.
 
 ### Compilação de Produção
 ```bash
@@ -182,6 +182,16 @@ npm run build
 O comando executa:
 1. `vite build` — Gera a SPA estática em `dist/`.
 2. `esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs` — Empacota o servidor Express em um único arquivo CJS autônomo.
+
+### Validação em lote (sem deploy)
+
+Para executar a validação manual no Google Cloud Build:
+
+```bash
+gcloud builds submit --config=cloudbuild-validation.yaml
+```
+
+Esse fluxo instala dependências, executa `npm run lint`, `npm test` e `npm run build`. Ele não implanta no Cloud Run. A publicação continua sendo uma ação manual separada no workflow de deploy.
 
 ### Inicialização em Produção
 ```bash
