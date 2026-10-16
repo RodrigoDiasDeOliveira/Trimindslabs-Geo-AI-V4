@@ -93,6 +93,8 @@ export interface AnalysisProvenance {
   correlationId: string;
   analysisId: string;
   pipelineVersion: string;
+  /** Requested by the UI; does not imply that this model executed. */
+  requestedModel?: string;
   provider: string;
   dataset: string;
   sceneId?: string;
