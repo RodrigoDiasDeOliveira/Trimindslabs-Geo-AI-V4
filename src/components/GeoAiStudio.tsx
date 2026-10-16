@@ -169,7 +169,6 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
   const [selectedModelId, setSelectedModelId] = useState<string>('resnet50');
   const [adapterEnabled, setAdapterEnabled] = useState<boolean>(true);
   const [spectralTab, setSpectralTab] = useState<'rgb' | 'nir' | 'ndvi' | 'ndre' | 'embedding'>('rgb');
-  const [hasInferred, setHasInferred] = useState<boolean>(false);
   const [customFile, setCustomFile] = useState<{ 
     name: string; 
     size: string; 
@@ -224,7 +223,6 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
       channels,
       format: formatLabel
     });
-    setHasInferred(false);
 
     if (isImage) {
       const reader = new FileReader();
@@ -310,9 +308,9 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
 
       {/* Feedback Toast */}
       {uploadFeedback && (
-        <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-xl text-xs flex items-center justify-between shadow-lg">
+        <div className="bg-amber-500/10 border border-amber-500/40 text-amber-200 px-4 py-3 rounded-xl text-xs flex items-center justify-between shadow-lg">
           <div className="flex items-center gap-2 font-medium">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
             <span>{uploadFeedback}</span>
           </div>
           <button 
@@ -428,7 +426,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                               region: `${preset.state} • ${preset.biome}`,
                               previewUrl: preset.previewUrl
                             });
-                            handleRunInference(500);
+
                           }}
                           className="flex-1 text-left cursor-pointer"
                         >
@@ -503,7 +501,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                               region: `${item.region} • ${item.farmName}`,
                               defaultClassId: item.results.classBreakdown[0]?.classId === 'ac' ? 'AnnualCrop' : 'Forest'
                             });
-                            handleRunInference(450);
+
                           }}
                           className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
                             isSelected
@@ -665,7 +663,6 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                         );
                         if (accepted) {
                           setSelectedModelId(model.id);
-                          setHasInferred(false);
                         }
                       }}
                       className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
@@ -776,7 +773,13 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
 
             {/* Satellite / Uploaded Viewport Area */}
             <div className="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 aspect-video flex items-center justify-center group">
-              {spectralTab === 'embedding' ? (
+              {spectralTab === 'embedding' && customFile ? (
+                <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center gap-2 text-amber-200">
+                  <AlertTriangle className="w-6 h-6" />
+                  <strong className="text-sm">Tensor não processado</strong>
+                  <span className="text-xs">Os valores de bandas demonstrados pertencem à amostra, não ao arquivo enviado. Nenhum tensor foi decodificado ou classificado.</span>
+                </div>
+              ) : spectralTab === 'embedding' ? (
                 /* 64-Band Embedding Profile Visualization */
                 <div className="w-full h-full p-4 flex flex-col justify-between bg-slate-950">
                   <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-2">
@@ -817,6 +820,7 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
                       src={uploadedPreviewUrl || selectedSample.previewUrl}
                       alt={selectedSample.name[language]}
                       className={`w-full h-full object-cover transition-all duration-300 ${
+                        customFile ? '' :
                         spectralTab === 'nir' ? 'contrast-125 saturate-200 hue-rotate-90' :
                         spectralTab === 'ndvi' ? 'grayscale contrast-150 invert sepia hue-rotate-60' : ''
                       }`}
