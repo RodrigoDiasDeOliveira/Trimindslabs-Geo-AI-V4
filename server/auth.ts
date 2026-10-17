@@ -6,7 +6,12 @@ const DEFAULT_DEV_SECRET = 'triminds_geoai_runtime_secret_key_v4';
 const DEFAULT_DEV_ADMIN_PASS = 'agentic';
 const DEFAULT_DEV_OPERATOR_PASS = 'funcionario';
 
+function isProductionEnvironment(): boolean {
+  return process.env.NODE_ENV === 'production' || Boolean(process.env.K_SERVICE);
+}
+
 function getAuthSecret(): string {
+  if (isProductionEnvironment()) return process.env.AUTH_SECRET || '';
   return process.env.AUTH_SECRET || DEFAULT_DEV_SECRET;
 }
 
@@ -37,6 +42,8 @@ function getOperatorPassword(): string {
  * 3. Default when neither is defined is ENABLED (true) - Secure by default.
  */
 export function isAuthenticationEnabled(): boolean {
+  if (isProductionEnvironment()) return true;
+
   if (process.env.AUTH_ENABLED !== undefined) {
     const val = process.env.AUTH_ENABLED.trim().toLowerCase();
     return val === 'true' || val === '1' || val === 'yes';
@@ -54,13 +61,18 @@ export function isAuthenticationEnabled(): boolean {
  * authentication must fail securely and indicate that service is unconfigured.
  */
 export function isAuthenticationConfigured(): boolean {
-  const secret = getAuthSecret();
-  const adminPass = getAdminPassword();
-  const operatorPass = getOperatorPassword();
+  const production = isProductionEnvironment();
+  const secret = process.env.AUTH_SECRET || (production ? '' : DEFAULT_DEV_SECRET);
+  const adminPass = process.env.ADMIN_PASSWORD || (production ? '' : DEFAULT_DEV_ADMIN_PASS);
+  const operatorPass = process.env.OPERATOR_PASSWORD || (production ? '' : DEFAULT_DEV_OPERATOR_PASS);
 
-  if (!secret || secret.trim() === '') return false;
-  if (!adminPass || adminPass.trim() === '') return false;
-  if (!operatorPass || operatorPass.trim() === '') return false;
+  if (!secret.trim() || !adminPass.trim() || !operatorPass.trim()) return false;
+
+  if (production && (
+    secret === DEFAULT_DEV_SECRET ||
+    adminPass === DEFAULT_DEV_ADMIN_PASS ||
+    operatorPass === DEFAULT_DEV_OPERATOR_PASS
+  )) return false;
 
   return true;
 }
@@ -139,36 +151,65 @@ export function createExpiredToken(payload: Omit<TokenPayload, 'iat' | 'exp'>, e
  * Verifies and decodes a signed token.
  */
 export function verifyToken(token: string): { valid: boolean; payload?: TokenPayload; error?: string } {
+  if (!isAuthenticationConfigured()) {
+    return { valid: false, error: 'Authentication service is not securely configured.' };
+  }
   if (!token || typeof token !== 'string') {
     return { valid: false, error: 'Token não fornecido.' };
   }
 
   const parts = token.split('.');
-  if (parts.length !== 3) {
+  if (parts.length !== 3 || parts.some(part => !part)) {
     return { valid: false, error: 'Formato de token inválido.' };
   }
 
   const [header, body, signature] = parts;
-  const expectedSignature = createHmac('sha256', getAuthSecret())
-    .update(`${header}.${body}`)
-    .digest('base64url');
+  if (![header, body, signature].every(part => /^[A-Za-z0-9_-]+$/.test(part))) {
+    return { valid: false, error: 'Formato de token inválido.' };
+  }
 
-  const sigBuf = Buffer.from(signature);
-  const expBuf = Buffer.from(expectedSignature);
+  try {
+    const decodedHeader = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+    if (!decodedHeader || decodedHeader.alg !== 'HS256' || decodedHeader.typ !== 'JWT') {
+      return { valid: false, error: 'Cabeçalho de token inválido.' };
+    }
+  } catch {
+    return { valid: false, error: 'Cabeçalho de token inválido.' };
+  }
 
-  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
+  const expected = createHmac('sha256', getAuthSecret())
+    .update(`${header}.${body}`).digest();
+  const supplied = Buffer.from(signature, 'base64url');
+
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
     return { valid: false, error: 'Assinatura criptográfica inválida.' };
   }
 
   try {
-    const payload: TokenPayload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     const now = Math.floor(Date.now() / 1000);
+    const roles = ['admin', 'operator', 'operador'];
 
-    if (payload.exp && payload.exp < now) {
-      return { valid: false, error: 'Token expirado.' };
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+        typeof payload.username !== 'string' || !payload.username.trim() ||
+        typeof payload.name !== 'string' || !payload.name.trim() ||
+        !roles.includes(payload.role) ||
+        !Number.isSafeInteger(payload.iat) ||
+        !Number.isSafeInteger(payload.exp)) {
+      return { valid: false, error: 'Payload de token inválido.' };
     }
 
-    return { valid: true, payload };
+    if (payload.iat > now + 60) {
+      return { valid: false, error: 'Token emitido no futuro.' };
+    }
+    if (payload.exp <= now) {
+      return { valid: false, error: 'Token expirado.' };
+    }
+    if (payload.exp <= payload.iat || payload.exp - payload.iat > 86400) {
+      return { valid: false, error: 'Duração do token inválida.' };
+    }
+
+    return { valid: true, payload: payload as TokenPayload };
   } catch {
     return { valid: false, error: 'Payload corrompido.' };
   }
@@ -276,8 +317,16 @@ export function authenticateUser(usernameInput?: string, passwordInput?: string)
  */
 export function requireAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   if (!isAuthenticationEnabled()) {
-    // If auth is disabled globally via configuration, bypass authentication
+    // Preserve the explicitly configured development bypass.
     return next();
+  }
+
+  if (!isAuthenticationConfigured()) {
+    return res.status(503).json({
+      authenticated: false,
+      configured: false,
+      error: 'Authentication service unavailable.'
+    });
   }
 
   const authHeader = req.headers.authorization || '';

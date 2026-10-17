@@ -2,9 +2,9 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = process.env.TEST_API_BASE || 'http://localhost:3000';
 
-async function runTests() {
+export async function runTests() {
   console.log('--- STARTING COMPREHENSIVE AUTHENTICATION & SECURITY TESTS ---\n');
   let failures = 0;
 
@@ -218,7 +218,9 @@ async function runTests() {
   }
 }
 
-runTests().catch(err => {
-  console.error('Test runner fatal error:', err);
-  process.exit(1);
-});
+if (process.env.AUTH_SECURITY_TEST_RUNNER !== '1') {
+  runTests().catch(err => {
+    console.error('Test runner fatal error:', err);
+    process.exitCode = 1;
+  });
+}

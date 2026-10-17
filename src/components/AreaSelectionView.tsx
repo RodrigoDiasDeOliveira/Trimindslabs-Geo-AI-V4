@@ -444,10 +444,37 @@ export const AreaSelectionView: React.FC = () => {
     }
   };
 
-  // Real Export: Download GeoJSON
-  const handleDownloadGeoJson = () => {
+  // Real Export: Download GeoJSON with authentication
+  const handleDownloadGeoJson = async () => {
     if (liveAnalysisResult) {
-      window.location.href = `/api/v1/analysis/${liveAnalysisResult.analysisId}/geojson`;
+      let downloadUrl: string | undefined;
+
+      try {
+        const response = await authFetch(
+          `/api/v1/analysis/${liveAnalysisResult.analysisId}/geojson`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Falha no download do GeoJSON (HTTP ${response.status})`);
+        }
+
+        const blob = await response.blob();
+        downloadUrl = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `analise_${liveAnalysisResult.analysisId}.geojson`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (error) {
+        console.error('Erro ao descarregar GeoJSON:', error);
+        window.alert('Não foi possível descarregar o GeoJSON. Verifique a autenticação e tente novamente.');
+      } finally {
+        if (downloadUrl) {
+          URL.revokeObjectURL(downloadUrl);
+        }
+      }
     } else if (currentAnalysis) {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentAnalysis, null, 2));
       const a = document.createElement('a');

@@ -19,8 +19,9 @@ import {
   publicStacSentinelProvider
 } from './server/services/satelliteProvider';
 import { pipelineService } from './server/services/pipelineService';
+import { canAccessAnalysisJob as canAccessAnalysisJobForUser } from './server/analysisAuthorization';
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
@@ -267,7 +268,11 @@ app.post('/api/v1/analysis', requireAuthMiddleware, (req, res) => {
       });
     }
 
-    const { jobId, status } = pipelineService.startJob(req.body);
+    const ownerUsername = (req as any).user?.username;
+    if (typeof ownerUsername !== 'string' || !ownerUsername.trim()) {
+      return res.status(401).json({ error: 'Identidade autenticada necessária para criar a análise.' });
+    }
+    const { jobId, status } = pipelineService.startJob(req.body, ownerUsername);
     return res.status(202).json({
       jobId,
       status,
@@ -280,10 +285,18 @@ app.post('/api/v1/analysis', requireAuthMiddleware, (req, res) => {
   }
 });
 
+function canAccessAnalysisJob(req: any, job: { ownerUsername?: string }): boolean {
+  return canAccessAnalysisJobForUser(
+    req.user,
+    job,
+    isAuthenticationEnabled()
+  );
+}
+
 // Poll Job Status
-app.get('/api/v1/analysis/:id/status', (req, res) => {
+app.get('/api/v1/analysis/:id/status', requireAuthMiddleware, (req, res) => {
   const job = pipelineService.getJob(req.params.id);
-  if (!job) {
+  if (!job || !canAccessAnalysisJob(req, job)) {
     return res.status(404).json({ error: 'Job de análise não encontrado.' });
   }
   return res.json({
@@ -299,20 +312,24 @@ app.get('/api/v1/analysis/:id/status', (req, res) => {
 });
 
 // Get Full Job Record
-app.get('/api/v1/analysis/:id', (req, res) => {
+app.get('/api/v1/analysis/:id', requireAuthMiddleware, (req, res) => {
   const job = pipelineService.getJob(req.params.id);
-  if (!job) {
+  if (!job || !canAccessAnalysisJob(req, job)) {
     return res.status(404).json({ error: 'Job de análise não encontrado.' });
   }
   return res.json(job);
 });
 
 // Get Analysis Result
-app.get('/api/v1/analysis/:id/result', (req, res) => {
+app.get('/api/v1/analysis/:id/result', requireAuthMiddleware, (req, res) => {
+  const job = pipelineService.getJob(req.params.id);
+  if (!job || !canAccessAnalysisJob(req, job)) {
+    return res.status(404).json({ error: 'Resultado não encontrado para o ID especificado.' });
+  }
+
   const result = pipelineService.getResult(req.params.id);
   if (!result) {
-    const job = pipelineService.getJob(req.params.id);
-    if (job && job.status !== 'completed') {
+    if (job.status !== 'completed') {
       return res.status(202).json({
         status: job.status,
         progressPct: job.progressPct,
@@ -325,7 +342,12 @@ app.get('/api/v1/analysis/:id/result', (req, res) => {
 });
 
 // Get Classified GeoJSON FeatureCollection
-app.get('/api/v1/analysis/:id/geojson', (req, res) => {
+app.get('/api/v1/analysis/:id/geojson', requireAuthMiddleware, (req, res) => {
+  const job = pipelineService.getJob(req.params.id);
+  if (!job || !canAccessAnalysisJob(req, job)) {
+    return res.status(404).json({ error: 'Resultado vetorial GeoJSON não encontrado.' });
+  }
+
   const result = pipelineService.getResult(req.params.id);
   if (!result) {
     return res.status(404).json({ error: 'Resultado vetorial GeoJSON não encontrado.' });
@@ -344,7 +366,11 @@ app.post('/api/v1/roi/analyze', requireAuthMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Geometria de ROI inválida.', details: validation.errors });
     }
 
-    const { jobId } = pipelineService.startJob(req.body);
+    const ownerUsername = (req as any).user?.username;
+    if (typeof ownerUsername !== 'string' || !ownerUsername.trim()) {
+      return res.status(401).json({ error: 'Identidade autenticada necessária para criar a análise.' });
+    }
+    const { jobId } = pipelineService.startJob(req.body, ownerUsername);
 
     // Poll until completed (with 30s timeout)
     const startTime = Date.now();
@@ -528,17 +554,49 @@ app.get('/api/v1/audit/logs', requireAuthMiddleware, (_req, res) => {
 });
 
 app.post('/api/v1/audit/logs', requireAuthMiddleware, (req, res) => {
-  const { action, details, user = 'operador', userName = 'Operador' } = req.body || {};
+  const identity = (req as any).user;
+  if (
+    !identity ||
+    typeof identity.username !== 'string' ||
+    !identity.username.trim() ||
+    typeof identity.name !== 'string' ||
+    !identity.name.trim() ||
+    !['admin', 'operator', 'operador'].includes(identity.role)
+  ) {
+    return res.status(401).json({
+      success: false,
+      error: 'VALID_AUTHENTICATED_IDENTITY_REQUIRED'
+    });
+  }
+
+  const { action, details } = req.body || {};
+
+  if (
+    typeof action !== 'string' ||
+    !action.trim() ||
+    action.trim().length > 100 ||
+    typeof details !== 'string' ||
+    !details.trim() ||
+    details.trim().length > 2000
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: 'INVALID_AUDIT_EVENT',
+      message: 'action deve ter entre 1 e 100 caracteres e details entre 1 e 2000 caracteres.'
+    });
+  }
+
   const newLog = {
-    id: `aud_${Date.now()}`,
+    id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     timestamp: new Date().toISOString(),
-    user,
-    userName,
-    action: action || 'ACTION_EXECUTED',
-    details: details || 'Ação registrada no sistema.',
+    user: identity.username,
+    userName: identity.name,
+    action: action.trim(),
+    details: details.trim(),
     ip: req.ip || '127.0.0.1',
-    status: 'SUCCESS'
+    status: 'DECLARED'
   };
+
   AUDIT_LOGS_MEMORY.unshift(newLog);
   res.status(201).json({ success: true, log: newLog });
 });
@@ -579,4 +637,7 @@ async function startServer() {
   }
 }
 
-startServer();
+// Do not start listeners or Vite when imported by integration tests.
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
