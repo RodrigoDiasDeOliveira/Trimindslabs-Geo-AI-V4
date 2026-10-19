@@ -32,8 +32,8 @@ export interface RealLeafletMapProps {
   lulcGeoJson?: GeoJSONFeatureCollection | null;
   activeLayer?: 'satellite' | 'lulc' | 'ndvi';
   overlayOpacity?: number;
-  isDrawingMode?: 'box' | 'polygon' | null;
-  onDrawingModeChange?: (mode: 'box' | 'polygon' | null) => void;
+  isDrawingMode?: 'box' | 'pentagon' | 'polygon' | null;
+  onDrawingModeChange?: (mode: 'box' | 'pentagon' | 'polygon' | null) => void;
 }
 
 const TILE_LAYERS = {
@@ -315,9 +315,25 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
     onDrawingModeChange?.(null);
   };
 
-  // Helper: Undo last vertex in polygon mode
+  // Helper: Undo last vertex in polygon or pentagon mode
   const handleUndoVertex = () => {
     setDrawingPoints(prev => prev.slice(0, -1));
+  };
+
+  // Helper: Stamp regular pentagon (5 vertices) at map center or specified coordinates
+  const handleStampRegularPentagon = (radiusKm = 2.0, targetCenter?: L.LatLng) => {
+    const map = mapInstanceRef.current;
+    const centerPt = targetCenter || (map ? map.getCenter() : L.latLng(center.lat, center.lng));
+    const degLatPerKm = 1 / 110.574;
+    const degLngPerKm = 1 / (111.320 * Math.cos((centerPt.lat * Math.PI) / 180));
+    const points: L.LatLng[] = [];
+    for (let i = 0; i < 5; i++) {
+      const angle = (2 * Math.PI * i) / 5 - Math.PI / 2; // North-aligned vertex
+      const lat = centerPt.lat + (radiusKm * Math.sin(angle)) * degLatPerKm;
+      const lng = centerPt.lng + (radiusKm * Math.cos(angle)) * degLngPerKm;
+      points.push(L.latLng(lat, lng));
+    }
+    finalizePolygon(points);
   };
 
   // Helper: Adjust any of the 4 sides of the rectangle (North, South, East, West)
@@ -409,6 +425,8 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
       marker.bindTooltip(
         isFirst 
           ? `Vértice 1 (Ponto Inicial - clique para fechar)` 
+          : isDrawingMode === 'pentagon'
+          ? `Vértice ${idx + 1} de 5`
           : `Vértice ${idx + 1}`,
         { permanent: false, direction: 'top' }
       );
@@ -478,6 +496,13 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
           }
           onDrawingModeChange?.(null);
         }
+      } else if (isDrawingMode === 'pentagon') {
+        if (drawingPoints.length < 4) {
+          setDrawingPoints(prev => [...prev, clicked]);
+        } else {
+          // 5th point finishes the pentagon automatically!
+          finalizePolygon([...drawingPoints, clicked]);
+        }
       } else if (isDrawingMode === 'polygon') {
         // Check if clicking near first point to close
         if (drawingPoints.length >= 3) {
@@ -494,7 +519,7 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
 
     const handleMapDblClick = (e: L.LeafletMouseEvent) => {
       L.DomEvent.stopPropagation(e);
-      if (isDrawingMode === 'polygon' && drawingPoints.length >= 3) {
+      if ((isDrawingMode === 'polygon' || isDrawingMode === 'pentagon') && drawingPoints.length >= 3) {
         finalizePolygon();
       }
     };
@@ -585,7 +610,7 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
             type="button"
             id="btn-draw-box"
             onClick={() => onDrawingModeChange?.(isDrawingMode === 'box' ? null : 'box')}
-            title="Desenhar Bounding Box Retangular no mapa"
+            title="Desenhar Bounding Box Retangular no mapa (2 pontos)"
             className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               isDrawingMode === 'box'
                 ? 'bg-amber-500 text-slate-950 shadow-sm ring-1 ring-amber-400'
@@ -594,6 +619,21 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
           >
             <Square className="w-3.5 h-3.5" />
             <span>Retângulo</span>
+          </button>
+
+          <button
+            type="button"
+            id="btn-draw-pentagon"
+            onClick={() => onDrawingModeChange?.(isDrawingMode === 'pentagon' ? null : 'pentagon')}
+            title="Demarcar área pentagonal (5 vértices sobre a imagem)"
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              isDrawingMode === 'pentagon'
+                ? 'bg-amber-500 text-slate-950 shadow-sm ring-1 ring-amber-400 font-bold'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Pentagon className="w-3.5 h-3.5" />
+            <span>Pentágono</span>
           </button>
 
           <button
@@ -607,8 +647,8 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <Pentagon className="w-3.5 h-3.5" />
-            <span>Polígono</span>
+            <Layers className="w-3.5 h-3.5" />
+            <span>Polígono Livre</span>
           </button>
 
           <button
@@ -687,6 +727,69 @@ export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({
             >
               <Check className="w-3.5 h-3.5" />
               <span>Finalizar Polígono</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDrawingPoints([]);
+                if (drawingLayerRef.current) drawingLayerRef.current.clearLayers();
+                onDrawingModeChange?.(null);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pentagon (5 Vertices) Drawing Active Controls Banner */}
+      {isDrawingMode === 'pentagon' && (
+        <div className="absolute top-16 left-3 right-3 sm:right-auto z-[1000] bg-slate-900/95 border border-amber-500/60 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl text-xs shadow-2xl flex flex-wrap items-center gap-3 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+            <span className="font-bold text-amber-400">Demarcação de Pentágono (5 Vértices)</span>
+            <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono text-[11px] font-bold">
+              Vértice {drawingPoints.length} de 5
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              type="button"
+              onClick={() => handleStampRegularPentagon(2.0)}
+              className="px-2.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+              title="Carimbar pentágono regular de 5 lados no centro da tela"
+            >
+              <Pentagon className="w-3.5 h-3.5 text-sky-400" />
+              <span>Pentágono Regular (2 km)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleUndoVertex}
+              disabled={drawingPoints.length === 0}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
+              title="Desfazer último ponto marcado"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Desfazer</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => finalizePolygon()}
+              disabled={drawingPoints.length < 3}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
+                drawingPoints.length >= 3
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 ring-2 ring-emerald-400/50'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              }`}
+              title="Fechar pentágono com os pontos já marcados"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Concluir</span>
             </button>
 
             <button

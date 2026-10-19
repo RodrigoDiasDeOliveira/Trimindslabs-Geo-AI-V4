@@ -7,7 +7,10 @@ const DEFAULT_DEV_ADMIN_PASS = 'agentic';
 const DEFAULT_DEV_OPERATOR_PASS = 'funcionario';
 
 function isProductionEnvironment(): boolean {
-  return process.env.NODE_ENV === 'production' || Boolean(process.env.K_SERVICE);
+  if (process.env.NODE_ENV === 'development' || process.env.K_SERVICE?.startsWith('ais-dev-')) {
+    return false;
+  }
+  return process.env.NODE_ENV === 'production' || (Boolean(process.env.K_SERVICE) && !process.env.K_SERVICE.startsWith('ais-dev-'));
 }
 
 function getAuthSecret(): string {
