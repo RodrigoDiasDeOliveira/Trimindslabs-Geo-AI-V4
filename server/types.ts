@@ -186,6 +186,7 @@ export type PipelineStage =
 
 export interface AnalysisJob {
   id: string;
+  ownerUsername?: string;
   status: PipelineStage;
   progressPct: number;
   stageMessage: string;

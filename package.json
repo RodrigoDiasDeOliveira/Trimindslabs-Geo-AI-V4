@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx test/auth-security.test.ts"
+    "test": "npm run test:isolated",
+    "test:isolated": "tsx test/analysis-ownership.test.ts && tsx test/auth-middleware.test.ts && tsx test/http-auth.integration.test.ts && tsx test/http-analysis-ownership.integration.test.ts && tsx test/run-auth-security.test.ts",
+    "test:security:local": "tsx test/auth-security.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -30,13 +32,13 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "vite": "^6.2.3"
   }
 }

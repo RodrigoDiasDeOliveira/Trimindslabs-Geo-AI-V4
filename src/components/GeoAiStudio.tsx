@@ -285,10 +285,9 @@ export const GeoAiStudio: React.FC<GeoAiStudioProps> = ({ onOpenMapSelector }) =
             <button
               type="button"
               onClick={handleOpenRealAnalysis}
-              disabled={isProcessing}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs text-sky-950 bg-sky-400 hover:bg-sky-300 transition-all shadow-md shadow-sky-500/20 disabled:opacity-50 cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+              <RefreshCw className="w-3.5 h-3.5" />
               <span>Abrir análise geoespacial</span>
             </button>
           )}

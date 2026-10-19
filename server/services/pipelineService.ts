@@ -38,12 +38,13 @@ export class GeoSpatialPipelineService {
   /**
    * Initializes and queues a real geospatial analysis job.
    */
-  startJob(request: StartAnalysisRequest): { jobId: string; status: PipelineStage } {
+  startJob(request: StartAnalysisRequest, ownerUsername: string): { jobId: string; status: PipelineStage } {
     const jobId = `geoai_${Date.now()}_${randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
 
     const job: AnalysisJob = {
       id: jobId,
+      ownerUsername,
       status: 'queued',
       progressPct: 5,
       stageMessage: 'Job enfileirado na pipeline geoespacial v4...',
